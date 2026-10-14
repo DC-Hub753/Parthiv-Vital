@@ -1,7 +1,8 @@
 """Demo-only API for submitting deterministic synthetic observations."""
 from typing import Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
+from .event_broker import publish_after_commit
 from pydantic import BaseModel, ConfigDict, Field
 
 from .model import active_model_metadata, explain, predict_probability, risk_level
@@ -21,7 +22,7 @@ class SimulationRequest(BaseModel):
 
 
 @router.post("/observations", response_model=RiskPrediction)
-def submit_demo_observation(payload: SimulationRequest):
+async def submit_demo_observation(payload: SimulationRequest, request: Request):
     """Generate, validate, score, and persist one fictional observation.
 
     A caller controls the step to make the demo deterministic and easy to
@@ -38,7 +39,8 @@ def submit_demo_observation(payload: SimulationRequest):
         factors=explain(values),
         model_version=active_model_metadata()["model_version"],
     )
-    saved = save_observation(payload.patient_id, values, result.model_dump())
+    saved = save_observation(payload.patient_id, values, result.model_dump(), session_id=request.headers.get('X-Session-ID'))
+    await publish_after_commit(saved['event'])
     return result.model_copy(
         update={"observation_id": saved["id"], "created_at": saved["created_at"]}
     )
