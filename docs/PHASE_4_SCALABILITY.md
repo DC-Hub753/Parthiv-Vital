@@ -41,7 +41,7 @@ Run a synthetic HTTP probe only against a test instance:
 python scripts/load_test.py --base-url http://127.0.0.1:8000 --requests 500 --concurrency 25 --output load-test-results.json
 ```
 
-The script reports measured throughput, success/error rate, and p50/p95/max latency. Commit or report its JSON only after running it against the target environment; results depend on instance size, network, database, and broker.
+The script reports measured throughput, success/error rate, and p50/p95/max latency. For a real cross-instance check, start two already-configured test instances and run `python scripts/multi_instance_smoke.py --instance-a https://test-a.example --instance-b https://test-b.example`. This connects to both WebSockets, writes through instance A, and verifies both receive the same event ID. Replace example URLs with actual test endpoints. Commit or report results only after running the scripts; results depend on instance size, network, database, and broker.
 
 ## Multi-instance acceptance test
 
