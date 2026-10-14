@@ -104,5 +104,5 @@ async def publish_after_commit(event:dict[str,Any])->None:
  from .storage import mark_event_published
  accepted=await broker.publish(event)
  if accepted:
-  try: mark_event_published(event["event_id"])
+  try: await asyncio.to_thread(mark_event_published,event["event_id"])
   except Exception: logger.exception("Event reached broker but outbox acknowledgement failed; duplicate retry is possible")
