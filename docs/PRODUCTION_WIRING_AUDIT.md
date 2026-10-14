@@ -13,6 +13,7 @@ The application remains a **synthetic-data software prototype, not a clinically 
 - API patient-list failures were silently replaced with synthetic patient records. API mode now propagates the error so backend outages cannot masquerade as live patient data.
 - Demo role quick-fill and local-only authentication are now limited to explicit demo mode. Production login must be accepted by the backend; a network failure cannot create a fake local authenticated session.
 - The repository's browser smoke and manual API smoke workflows now target the Parthiv-Vital Render services, not the separate VitalGuard deployment.
+- The isolated local browser-test build explicitly enables demo mode; the live browser smoke still targets the deployed Parthiv frontend.
 
 ## Render configuration
 
