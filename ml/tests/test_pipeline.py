@@ -14,7 +14,7 @@ import joblib
 def sample(n=60):
  rng=np.random.default_rng(4); d={"patient_id":[f"p{i}" for i in range(n)]}
  for f in FEATURES: d[f]=rng.uniform(20,90,n)
- d["spo2"]=rng.uniform(90,100,n); d["systolic_bp"]=rng.uniform(100,150,n); d["diastolic_bp"]=rng.uniform(60,90,n); d["temperature"]=rng.uniform(36,38,n); d["target"]=[i%2 for i in range(n)]
+ d["spo2"]=rng.uniform(90,100,n); d["systolic_bp"]=rng.uniform(100,150,n); d["diastolic_bp"]=rng.uniform(60,90,n); d["temperature"]=rng.uniform(36,38,n); d["respiratory_rate"]=rng.uniform(8,30,n); d["target"]=[i%2 for i in range(n)]
  return pd.DataFrame(d)
 def test_validates_and_preserves_feature_order():
  d=validate_frame(sample()); assert list(d[FEATURES].columns)==FEATURES
