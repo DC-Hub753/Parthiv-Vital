@@ -30,6 +30,9 @@ def test_health_endpoint(client):
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
     assert response.json()["demo_only"] is True
+    assert response.json()["database_backend"] in {"sqlite", "postgresql"}
+    assert response.json()["schema_ready"] is True
+    assert response.json()["schema_version"] == 1
 
 
 def test_model_info_is_explicit_about_synthetic_data(client):
