@@ -11,7 +11,7 @@ export class EventCursor {
  constructor(initialSequence=0){this.cursor=Math.max(0,initialSequence);}
  get lastSequence():number{return this.cursor;}
  accept(event:LiveEvent):boolean{
-  if(!event.event_id||!Number.isSafeInteger(event.event_seq)||event.event_seq<1||this.seen.has(event.event_id))return false;
+  if(!event.event_id||!Number.isSafeInteger(event.event_seq)||event.event_seq<1||event.event_seq<=this.cursor||this.seen.has(event.event_id))return false;
   this.seen.add(event.event_id); this.cursor=Math.max(this.cursor,event.event_seq);
   if(this.seen.size>5000){const keep=[...this.seen].slice(-2500);this.seen.clear();keep.forEach(id=>this.seen.add(id));}
   return true;
