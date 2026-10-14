@@ -35,6 +35,20 @@ class EventBroker:
   except Exception:
    self._healthy=False
    logger.exception("Redis event broker unavailable; cross-instance delivery is degraded")
+ async def ensure_connected(self):
+  """Retry initial connection failures; listener handles later disconnects."""
+  if not self.configured or self._healthy:return self._healthy
+  try:
+   from redis.asyncio import Redis
+   if self._redis is None:self._redis=Redis.from_url(self.redis_url,decode_responses=True,socket_connect_timeout=2,socket_timeout=3,health_check_interval=15)
+   await self._redis.ping()
+   if self._pubsub is None:
+    self._pubsub=self._redis.pubsub(); await self._pubsub.subscribe(self.channel)
+   self._healthy=True
+   if self._listener is None or self._listener.done():self._listener=asyncio.create_task(self._listen(),name="vitalguard-redis-event-listener")
+  except Exception:
+   self._healthy=False; logger.warning("Redis broker connection retry failed",exc_info=True)
+  return self._healthy
  async def stop(self):
   self._running=False
   if self._listener:
