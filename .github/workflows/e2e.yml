@@ -10,6 +10,15 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/e2e.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'e2e/**'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/e2e.yml'
   workflow_dispatch:
 
 permissions:
@@ -31,11 +40,15 @@ jobs:
         run: npm install --no-save --package-lock=false --no-audit --no-fund --fetch-timeout=60000 --fetch-retries=1 @playwright/test@1.56.1
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - run: npm run build
+      - name: Build demo-mode app for isolated browser tests
+        run: npm run build
+        env:
+          VITE_DEMO_MODE: 'true'
       - name: Test local production build
         run: npx playwright test
 
   live-browser-smoke:
+    if: github.event_name != 'pull_request'
     needs: browser-e2e
     runs-on: ubuntu-latest
     timeout-minutes: 8
@@ -53,5 +66,5 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Verify deployed frontend routes and refreshes
         env:
-          E2E_BASE_URL: https://vitalguard-ai-dc.onrender.com
+          E2E_BASE_URL: https://parthiv-vital-frontend.onrender.com
         run: npx playwright test

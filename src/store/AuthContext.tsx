@@ -22,7 +22,6 @@ type AuthContextValue = {
 };
 
 const STORAGE_KEY = 'vitalguard.operator.session';
-
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 function readSession(): AuthState | null {
@@ -41,22 +40,26 @@ function readSession(): AuthState | null {
   }
 }
 
+const DEMO_ROLES: Record<string, { pass: string; role: UserRole; name: string }> = {
+  admin: { pass: 'AdminPass123!', role: 'admin', name: 'System Administrator' },
+  clinician: { pass: 'ClinicianPass123!', role: 'clinician', name: 'Dr. Jane Wilson' },
+  nurse: { pass: 'NursePass123!', role: 'nurse', name: 'Nurse Robert Taylor' },
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<AuthState | null>(() => readSession());
 
   const logout = useCallback(async () => {
     const currentToken = session?.token;
-    if (currentToken) {
+    if (currentToken && !currentToken.startsWith('demo-local-token-')) {
       try {
         await fetch(`${APP_CONFIG.apiBaseUrl}/api/v1/auth/logout`, {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${currentToken}`,
-          },
+          headers: { Authorization: `Bearer ${currentToken}` },
           signal: AbortSignal.timeout(3000),
         });
       } catch {
-        // Silently continue with local cleanup
+        // Continue with local cleanup if the API is unreachable.
       }
     }
     sessionStorage.removeItem(STORAGE_KEY);
@@ -64,11 +67,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [session]);
 
   const login = useCallback(async (username: string, password: string) => {
+    const normalizedUsername = username.toLowerCase().trim();
+
+    // Local role accounts are available only in explicit demo mode. Never
+    // turn a network outage into a locally authenticated production session.
+    if (APP_CONFIG.demoMode) {
+      const demoAccount = DEMO_ROLES[normalizedUsername];
+      if (!demoAccount || demoAccount.pass !== password) {
+        throw new Error('Invalid demo username or password.');
+      }
+      const demoSession: AuthState = {
+        token: 'demo-local-token-' + Date.now(),
+        username: normalizedUsername,
+        role: demoAccount.role,
+        fullName: demoAccount.name,
+        expiresAt: Date.now() + 15 * 60 * 1000,
+      };
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(demoSession));
+      setSession(demoSession);
+      return;
+    }
+
     try {
       const response = await fetch(`${APP_CONFIG.apiBaseUrl}/api/v1/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username: username.trim(), password }),
         signal: AbortSignal.timeout(30000),
       });
 
@@ -100,34 +124,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         fullName: result.full_name || result.username,
         expiresAt: Date.now() + result.expires_in * 1000,
       };
-
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       setSession(next);
     } catch (err: any) {
-      // If server is unreachable or timed out, and demo credentials match, provide local demo fallback
-      const demoRoles: Record<string, { pass: string; role: UserRole; name: string }> = {
-        admin: { pass: 'AdminPass123!', role: 'admin', name: 'System Administrator' },
-        clinician: { pass: 'ClinicianPass123!', role: 'clinician', name: 'Dr. Jane Wilson' },
-        nurse: { pass: 'NursePass123!', role: 'nurse', name: 'Nurse Robert Taylor' },
-      };
-      const demoAccount = demoRoles[username.toLowerCase().trim()];
-      const isTimeoutOrNetwork = err?.name === 'TimeoutError' || err?.message?.toLowerCase().includes('time') || err?.message?.toLowerCase().includes('abort') || err?.message?.toLowerCase().includes('failed to fetch');
-
-      if (demoAccount && demoAccount.pass === password && isTimeoutOrNetwork) {
-        const fallbackSession: AuthState = {
-          token: 'demo-local-token-' + Date.now(),
-          username: username.trim(),
-          role: demoAccount.role,
-          fullName: demoAccount.name,
-          expiresAt: Date.now() + 15 * 60 * 1000,
-        };
-        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(fallbackSession));
-        setSession(fallbackSession);
-        return;
-      }
+      const message = String(err?.message ?? '').toLowerCase();
+      const isTimeoutOrNetwork = err?.name === 'TimeoutError'
+        || message.includes('timed out')
+        || message.includes('abort')
+        || message.includes('failed to fetch')
+        || message.includes('networkerror');
 
       if (isTimeoutOrNetwork) {
-        throw new Error('Server connection timed out or is unreachable. Please verify backend is running on port 8000.');
+        throw new Error('Server connection timed out or is unreachable. Please verify the backend is available.');
       }
       throw err;
     }
