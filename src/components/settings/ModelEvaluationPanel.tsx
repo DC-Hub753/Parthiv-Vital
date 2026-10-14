@@ -1,93 +1,22 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Activity, AlertTriangle, RefreshCw, Scale } from 'lucide-react';
+import { AlertTriangle, RefreshCw, Scale } from 'lucide-react';
 import { APP_CONFIG } from '../../services/config.ts';
 
-type Evaluation = {
-  model_version: string;
-  evaluation_type: string;
-  sample_count: number;
-  positive_label_definition: string;
-  threshold: number;
-  metrics: Record<string, number>;
-  confusion_matrix: { labels: string[]; rows_actual_columns_predicted: number[][] };
-  limitations: string[];
-  demo_only: true;
-  clinically_validated: false;
-};
-
-export function ModelEvaluationPanel() {
-  const [report, setReport] = useState<Evaluation | null>(null);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const response = await fetch(`${APP_CONFIG.apiBaseUrl}/api/v1/model/evaluation`, { signal: AbortSignal.timeout(10000) });
-      if (!response.ok) throw new Error('Evaluation endpoint unavailable');
-      setReport(await response.json() as Evaluation);
-      setError('');
-    } catch {
-      setError('Model evaluation endpoint is not available yet. Check the backend deployment branch and build logs.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { void load(); }, [load]);
-
-  const metricNames: Record<string, string> = {
-    accuracy: 'Accuracy', precision: 'Precision', recall: 'Recall', f1: 'F1 score', roc_auc: 'ROC-AUC',
-  };
-
-  return (
-    <section className="card p-4 sm:p-5" aria-labelledby="model-evaluation-heading">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="eyebrow flex items-center gap-1.5"><Scale size={13} /> Model transparency</p>
-          <h2 id="model-evaluation-heading" className="font-display text-xl font-extrabold mt-1">Model evaluation report</h2>
-          <p className="text-xs text-slate-500 mt-1">Reproducible synthetic holdout · not clinical performance</p>
-        </div>
-        <button className="btn-secondary" onClick={() => void load()} disabled={loading}>
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh report
-        </button>
-      </div>
-      {error && <p role="alert" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/40 dark:border-amber-900 dark:text-amber-200">{error}</p>}
-      {report && <>
-        <div className="mt-4 flex flex-wrap gap-2 text-xs">
-          <span className="rounded-lg bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5">Version {report.model_version}</span>
-          <span className="rounded-lg bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5">{report.sample_count.toLocaleString()} holdout samples</span>
-          <span className="rounded-lg bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200 px-2.5 py-1.5">Synthetic labels only</span>
-        </div>
-        <div className="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-2">
-          {Object.entries(report.metrics).map(([key, value]) => (
-            <div key={key} className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
-              <p className="text-xs text-slate-500">{metricNames[key] ?? key}</p>
-              <p className="metric text-2xl mt-1">{(value * 100).toFixed(1)}<span className="text-sm">%</span></p>
-            </div>
-          ))}
-        </div>
-        <div className="mt-4 grid md:grid-cols-2 gap-4">
-          <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 p-3">
-            <p className="text-sm font-bold flex items-center gap-1.5"><Activity size={14} /> Confusion matrix</p>
-            <p className="text-xs text-slate-500 mt-1">Rows = actual synthetic class; columns = predicted class</p>
-            <table className="mt-2 w-full text-sm"><tbody>
-              {report.confusion_matrix.rows_actual_columns_predicted.map((row, index) => <tr key={index}>
-                <th className="text-left py-2 pr-2 text-xs text-slate-500">{report.confusion_matrix.labels[index]?.replace('synthetic_', '')}</th>
-                {row.map((value, cell) => <td key={cell} className="text-center py-2 px-3 font-bold tabular-nums border border-slate-200 dark:border-slate-700">{value.toLocaleString()}</td>)}
-              </tr>)}
-            </tbody></table>
-          </div>
-          <div className="rounded-xl border border-amber-200 dark:border-amber-900 p-3">
-            <p className="text-sm font-bold flex items-center gap-1.5 text-amber-800 dark:text-amber-200"><AlertTriangle size={14} /> Important limitations</p>
-            <ul className="mt-2 list-disc pl-4 space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
-              {report.limitations.map((limitation) => <li key={limitation}>{limitation}</li>)}
-            </ul>
-          </div>
-        </div>
-        <p className="text-xs text-slate-500 mt-3">Synthetic label rule: {report.positive_label_definition}. Metrics show agreement with that generated rule only.</p>
-      </>}
-      <p className="mt-3 text-[11px] text-slate-400">This report does not establish safety, clinical accuracy, calibration, or suitability for diagnosis, triage, or treatment.</p>
-    </section>
-  );
+type Candidate = { validation_metrics?: Record<string, number | null>; test_metrics?: Record<string, number | null>; artifact_bytes?: number; inference_ms_per_row_approx?: number };
+type Evaluation = { model_version:string; algorithm:string; mode:string; selected_candidate:string|null; candidates:Record<string,Candidate>; training_data_version:string|null; clinical_training_verified:boolean; clinically_validated:boolean; demo_only:boolean; limitations:string[] };
+const pct=(value:number|null|undefined)=>value==null?'—':(value*100).toFixed(1)+'%';
+export function ModelEvaluationPanel(){
+ const [report,setReport]=useState<Evaluation|null>(null); const [error,setError]=useState(''); const [loading,setLoading]=useState(true);
+ const load=useCallback(async()=>{setLoading(true);try{const response=await fetch(APP_CONFIG.apiBaseUrl+'/api/v1/model/evaluation',{signal:AbortSignal.timeout(10000)});if(!response.ok)throw new Error('unavailable');setReport(await response.json() as Evaluation);setError('');}catch{setError('Model evaluation metadata endpoint is unavailable. The active model remains in its configured demo mode.');}finally{setLoading(false);}},[]);
+ useEffect(()=>{void load();},[load]);
+ return <section className="card p-4 sm:p-5" aria-labelledby="model-evaluation-heading">
+  <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="eyebrow flex items-center gap-1.5"><Scale size={13}/> Model transparency</p><h2 id="model-evaluation-heading" className="font-display text-xl font-extrabold mt-1">Model evaluation & registry</h2><p className="text-xs text-slate-500 mt-1">Active artifact metadata and comparable offline benchmark results</p></div><button className="btn-secondary" onClick={()=>void load()} disabled={loading}><RefreshCw size={14} className={loading?'animate-spin':''}/> Refresh report</button></div>
+  {error&&<p role="alert" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/40 dark:border-amber-900 dark:text-amber-200">{error}</p>}
+  {report&&<>
+   <div className="mt-4 flex flex-wrap gap-2 text-xs"><span className="rounded-lg bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5">Active: {report.model_version}</span><span className="rounded-lg bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5">Algorithm: {report.algorithm}</span><span className="rounded-lg bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5">Mode: {report.mode.replace(/_/g,' ')}</span>{report.training_data_version&&<span className="rounded-lg bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5">Dataset: {report.training_data_version}</span>}<span className="rounded-lg bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200 px-2.5 py-1.5">Not clinically validated</span></div>
+   {!Object.keys(report.candidates??{}).length?<p className="mt-4 rounded-xl border border-slate-200 dark:border-slate-700 p-3 text-sm text-slate-500">No versioned benchmark manifest is configured. No performance metrics are shown rather than inventing results.</p>:<div className="mt-4 overflow-x-auto"><table className="w-full text-sm"><caption className="text-left text-xs text-slate-500 mb-2">Candidate comparison · test metrics are descriptive only and must not be used for model selection</caption><thead><tr className="border-b border-slate-200 dark:border-slate-700 text-left text-xs text-slate-500"><th className="py-2 pr-3">Candidate</th><th className="py-2 px-2">ROC-AUC (validation)</th><th className="py-2 px-2">PR-AUC (validation)</th><th className="py-2 px-2">ROC-AUC (test)</th><th className="py-2 px-2">Brier (test)</th><th className="py-2 px-2">ECE (test)</th><th className="py-2 px-2">Size</th><th className="py-2 px-2">ms/row*</th></tr></thead><tbody>{Object.entries(report.candidates).map(([name,c])=><tr key={name} className="border-b border-slate-100 dark:border-slate-800"><th className="py-2 pr-3 text-left font-semibold">{name.replace(/_/g,' ')}{report.selected_candidate===name&&<span className="ml-2 rounded bg-teal-50 text-teal-800 px-1.5 py-0.5 text-[10px]">Validation-selected</span>}</th><td className="py-2 px-2 tabular-nums">{pct(c.validation_metrics?.roc_auc)}</td><td className="py-2 px-2 tabular-nums">{pct(c.validation_metrics?.pr_auc)}</td><td className="py-2 px-2 tabular-nums">{pct(c.test_metrics?.roc_auc)}</td><td className="py-2 px-2 tabular-nums">{c.test_metrics?.brier_score==null?'—':c.test_metrics.brier_score.toFixed(4)}</td><td className="py-2 px-2 tabular-nums">{c.test_metrics?.calibration_ece_10_bins==null?'—':c.test_metrics.calibration_ece_10_bins.toFixed(4)}</td><td className="py-2 px-2 tabular-nums">{c.artifact_bytes==null?'—':(c.artifact_bytes/1024).toFixed(1)+' KB'}</td><td className="py-2 px-2 tabular-nums">{c.inference_ms_per_row_approx==null?'—':c.inference_ms_per_row_approx.toFixed(3)}</td></tr>)}</tbody></table><p className="text-[11px] text-slate-500 mt-2">*Approximate local inference timing; not a deployment benchmark. Brier score is lower-is-better.</p></div>}
+   <div className="mt-4 rounded-xl border border-amber-200 dark:border-amber-900 p-3"><p className="text-sm font-bold flex items-center gap-1.5 text-amber-800 dark:text-amber-200"><AlertTriangle size={14}/> Interpretation and limitations</p><ul className="mt-2 list-disc pl-4 space-y-1.5 text-xs text-slate-600 dark:text-slate-300">{(report.limitations??[]).map((item)=><li key={item}>{item}</li>)}</ul><p className="text-xs text-slate-500 mt-2">Clinical training verified: {report.clinical_training_verified?'yes':'no'} · Clinical validation: {report.clinically_validated?'yes':'no'}</p></div>
+  </>}
+  <p className="mt-3 text-[11px] text-slate-400">Algorithm selection requires the intended clinical outcome, an approved dataset, and predefined validation criteria. Synthetic labels cannot establish clinical superiority.</p>
+ </section>;
 }

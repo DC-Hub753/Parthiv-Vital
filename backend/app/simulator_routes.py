@@ -1,10 +1,12 @@
 """Demo-only API for submitting deterministic synthetic observations."""
+import asyncio
 from typing import Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
+from .event_broker import publish_after_commit
 from pydantic import BaseModel, ConfigDict, Field
 
-from .model import MODEL_VERSION, explain, predict_probability, risk_level
+from .model import active_model_metadata, explain, predict_probability, risk_level
 from .schemas import RiskPrediction
 from .simulator import observation_for_step
 from .storage import save_observation
@@ -21,14 +23,14 @@ class SimulationRequest(BaseModel):
 
 
 @router.post("/observations", response_model=RiskPrediction)
-def submit_demo_observation(payload: SimulationRequest):
+async def submit_demo_observation(payload: SimulationRequest, request: Request):
     """Generate, validate, score, and persist one fictional observation.
 
     A caller controls the step to make the demo deterministic and easy to
     present. Repeated requests are separate observations, not idempotent writes.
     """
     values = observation_for_step(payload.scenario, payload.step)
-    probability = predict_probability(values)
+    probability = await asyncio.to_thread(predict_probability, values)
     score = round(probability * 100)
     result = RiskPrediction(
         patient_id=payload.patient_id,
@@ -36,9 +38,10 @@ def submit_demo_observation(payload: SimulationRequest):
         risk_level=risk_level(score),
         model_probability=round(probability, 4),
         factors=explain(values),
-        model_version=MODEL_VERSION,
+        model_version=active_model_metadata()["model_version"],
     )
-    saved = save_observation(payload.patient_id, values, result.model_dump())
+    saved = await asyncio.to_thread(save_observation, payload.patient_id, values, result.model_dump(), session_id=request.headers.get('X-Session-ID'))
+    await publish_after_commit(saved['event'])
     return result.model_copy(
         update={"observation_id": saved["id"], "created_at": saved["created_at"]}
     )

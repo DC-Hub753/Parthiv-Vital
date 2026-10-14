@@ -1,0 +1,29 @@
+# Versioned benchmark protocol. Synthetic smoke metrics are not clinical evidence.
+project: vitalguard-ml
+seed: 20261010
+feature_version: vital-signs-v1
+features: [age, heart_rate, spo2, systolic_bp, diastolic_bp, temperature, respiratory_rate]
+target:
+  name: demo_heuristic_risk_label
+  positive_class: 1
+  definition: "Heuristic label used only for pipeline smoke tests; not a clinical outcome."
+  prediction_time: "same observation time; synthetic demonstration only"
+  outcome_window: "not applicable to synthetic heuristic labels"
+split:
+  train: 0.70
+  validation: 0.15
+  test: 0.15
+  strategy: patient-group-disjoint
+model:
+  candidates: [logistic_regression, random_forest, xgboost]
+  selection_metric: roc_auc
+  threshold: 0.5
+  threshold_policy: fixed_predeclared_until_clinical_requirements_exist
+  max_iter: 1200
+  rf_estimators: 200
+  rf_min_samples_leaf: 2
+  include_xgboost: true
+  xgb_estimators: 150
+  xgb_max_depth: 3
+  xgb_learning_rate: 0.05
+artifact_dir: ml/artifacts

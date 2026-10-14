@@ -11,8 +11,8 @@
 
 ### Phase 2 — Storage adapter
 - SQLAlchemy adapter supports local SQLite and PostgreSQL via private `DATABASE_URL`.
-- Schema creation/migration helpers and history indexes.
-- **Hosted status (2026-10-14):** the live `/health` smoke check reports PostgreSQL as the active backend. This confirms runtime backend selection/reachability, but not survival across restart/redeploy or a tested backup/restore.
+- Phase 1 branch adds process-reused pooling, bounded PostgreSQL timeouts, additive schema migration, fail-closed schema checks, controlled storage failures, and health diagnostics.
+- **Hosted status (2026-10-14):** PostgreSQL contains existing observations, alerts, audit events, ingestion records, patients, users, and migration history. A recent prediction request did not coincide with a new observation in that database, so active-backend binding is not proven. The health response must be checked after a reviewed deployment; restart durability and backup/restore still require explicit verification.
 
 ### Phase 3 — Live event delivery
 - WebSocket endpoint: `/api/v1/live`.
