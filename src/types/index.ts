@@ -5,14 +5,11 @@ export type Ward = 'ICU' | 'Emergency' | 'General Ward' | 'Cardiology';
 
 export interface Patient {
   id: string;
-  displayName?: string;
   age: number;
-  sex: 'M' | 'F' | 'U';
+  sex: 'M' | 'F';
   ward: Ward;
   bed: string;
   scenario: Scenario;
-  active?: boolean;
-  dateOfBirth?: string | null;
   updatedAt: string;
 }
 
@@ -50,13 +47,7 @@ export interface RiskFactor {
 }
 
 export type AlertSeverity = 'critical' | 'high' | 'moderate' | 'info';
-export type AlertStatus = 'open' | 'acknowledged' | 'assigned' | 'resolved' | 'reopened';
-
-export interface AlertNote {
-  note: string;
-  actor: string;
-  created_at: string;
-}
+export type AlertStatus = 'open' | 'acknowledged' | 'resolved';
 
 export interface AlertItem {
   id: string;
@@ -67,32 +58,8 @@ export interface AlertItem {
   contributors: string[];
   status: AlertStatus;
   createdAt: string;
-  alertType?: 'clinical_rule' | 'ml_derived' | 'trend_warning' | 'data_quality' | string;
-  assignedTo?: string | null;
-  assignedAt?: string | null;
-  deadlineMinutes?: number | null;
-  ageMinutes?: number;
-  isOverdue?: boolean;
-  notes?: AlertNote[];
   riskBefore?: number;
   riskAfter?: number;
-}
-
-export interface PrioritizedPatient {
-  patient_id: string;
-  display_name: string;
-  ward: string;
-  bed: string;
-  priority_rank: number;
-  risk_category: string;
-  news2_score: number | null;
-  ml_risk: number | null;
-  active_alerts_count: number;
-  critical_alerts_count: number;
-  needs_review: boolean;
-  review_reasons: string[];
-  stale_status: string;
-  last_observed_at: string | null;
 }
 
 export interface SimulationState {
@@ -103,4 +70,3 @@ export interface SimulationState {
 }
 
 export const DEMO_DISCLAIMER = 'All patient data shown in Demo Mode is synthetic and intended only for software demonstration.';
-

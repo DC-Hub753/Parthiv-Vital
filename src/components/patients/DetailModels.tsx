@@ -36,12 +36,12 @@ export function DetailHeader({ id, ward, bed, age, sex, scenario, updated }: {
   id: string; ward: string; bed: string; age: number; sex: string; scenario: string; updated: string;
 }) {
   return (
-    <div className="relative z-10 flex flex-wrap items-center gap-2.5">
+    <div className="flex flex-wrap items-center gap-2.5">
       <Link to="/patients" className="btn-secondary !py-1.5 !text-[13px]"><ArrowLeft size={14} aria-hidden /> Back</Link>
       <h2 className="font-display text-[22px] font-extrabold tracking-tight ml-1">Patient {id}</h2>
-      <span className="text-sm text-slate-300">{ward} · Bed {bed} · Age {age} · {sex}</span>
+      <span className="text-sm text-slate-500">{ward} · Bed {bed} · Age {age} · {sex}</span>
       <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-teal-50 text-teal-700 border border-teal-200/70 dark:bg-teal-950/50 dark:text-teal-200 dark:border-teal-900/60 capitalize">Trajectory: {scenario}</span>
-      <span className="text-[11px] text-slate-300 tabular-nums ml-auto">Updated {formatTimeAgo(updated)}</span>
+      <span className="text-[11px] text-slate-400 tabular-nums ml-auto">Updated {formatTimeAgo(updated)}</span>
     </div>
   );
 }

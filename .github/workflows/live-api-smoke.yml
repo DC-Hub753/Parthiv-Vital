@@ -1,13 +1,17 @@
 name: Live API smoke test
 
 on:
-  # Run manually after the Parthiv backend deploy is confirmed and smoke credentials are configured.
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/live-api-smoke.yml'
+      - 'scripts/smoke-test.mjs'
   workflow_dispatch:
     inputs:
       api_base_url:
-        description: "Deployed Parthiv-Vital API base URL"
+        description: "Deployed VitalGuard API base URL"
         required: false
-        default: "https://parthiv-vital-api-backend.onrender.com"
+        default: "https://vitalguard-risk-api.onrender.com"
         type: string
 
 permissions:
@@ -16,7 +20,7 @@ permissions:
 jobs:
   smoke-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -25,6 +29,4 @@ jobs:
       - name: Test deployed API end-to-end
         env:
           VITALGUARD_API_URL: ${{ inputs.api_base_url }}
-          VITALGUARD_SMOKE_USERNAME: ${{ secrets.VITALGUARD_SMOKE_USERNAME }}
-          VITALGUARD_SMOKE_PASSWORD: ${{ secrets.VITALGUARD_SMOKE_PASSWORD }}
         run: node scripts/smoke-test.mjs

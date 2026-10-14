@@ -1,5 +1,4 @@
 import { APP_CONFIG } from './config.ts';
-import { getOperatorAccessToken, authorizedFetch } from './authenticatedFetch.ts';
 import type { ObservationHistory } from './api.ts';
 
 export interface LiveObservationEvent {
@@ -9,31 +8,15 @@ export interface LiveObservationEvent {
   created_at: string;
   observation: Record<string, number>;
   prediction: { risk_score: number; risk_level: string; model_version?: string };
-  source_mode?: string;
-  demo_only?: boolean;
+  demo_only: true;
 }
 export interface LiveAlertEvent {
-  type: 'alert.created' | 'alert.updated' | 'alert.deleted';
-  event_id?: number;
-  alert_id?: number;
-  alert: {
-    id: number;
-    patient_id: string;
-    title: string;
-    severity: string;
-    status: string;
-    created_at: string;
-    alert_type?: string;
-    assigned_to?: string | null;
-    notes?: any[];
-  };
-  demo_only?: boolean;
+  type: 'alert.created';
+  event_id: number;
+  alert: { id: number; patient_id: string; title: string; severity: string; status: string; created_at: string };
+  demo_only: true;
 }
-export type LiveEvent =
-  | LiveObservationEvent
-  | LiveAlertEvent
-  | { type: 'connected' | 'pong' | 'error' | 'subscribed' | 'unsubscribed'; [key: string]: any };
-
+export type LiveEvent = LiveObservationEvent | LiveAlertEvent | { type: 'connected' | 'pong'; demo_only?: true };
 
 export function createLiveSocket(onEvent: (event: LiveEvent) => void, onStatus: (status: 'connecting' | 'connected' | 'reconnecting' | 'offline') => void) {
   let socket: WebSocket | null = null;
@@ -41,8 +24,6 @@ export function createLiveSocket(onEvent: (event: LiveEvent) => void, onStatus: 
   let retry = 0;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let heartbeat: ReturnType<typeof setInterval> | undefined;
-  let stableConnectionTimer: ReturnType<typeof setTimeout> | undefined;
-  let lastPongAt = 0;
 
   const connect = () => {
     if (stopped) return;
@@ -50,62 +31,30 @@ export function createLiveSocket(onEvent: (event: LiveEvent) => void, onStatus: 
     const base = APP_CONFIG.apiBaseUrl;
     const wsBase = base.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:');
     try {
-      const token = getOperatorAccessToken();
-      if (!token) {
-        onStatus('offline');
-        return;
-      }
-      socket = new WebSocket(`${wsBase}/api/v1/live`, ['vitalguard-live', `vg-token.${token}`]);
+      socket = new WebSocket(`${wsBase}/api/v1/live`);
     } catch {
       scheduleRetry();
       return;
     }
-    const activeSocket = socket;
     socket.onopen = () => {
-      if (activeSocket !== socket || stopped) return;
+      retry = 0;
       onStatus('connected');
-      lastPongAt = Date.now();
-      // Only reset the backoff after the connection has remained healthy for
-      // 30 seconds. Brief connect/drop loops must not retry forever at 1 second.
-      stableConnectionTimer = setTimeout(() => {
-        if (activeSocket === socket && activeSocket.readyState === WebSocket.OPEN) retry = 0;
-      }, 30000);
       heartbeat = setInterval(() => {
-        if (activeSocket !== socket || activeSocket.readyState !== WebSocket.OPEN) return;
-        if (Date.now() - lastPongAt > 60000) {
-          activeSocket.close();
-          return;
-        }
-        try {
-          activeSocket.send('ping');
-        } catch {
-          activeSocket.close();
-        }
+        if (socket?.readyState === WebSocket.OPEN) socket.send('ping');
       }, 25000);
     };
     socket.onmessage = (message) => {
-      if (activeSocket !== socket || stopped) return;
       try {
         const event = JSON.parse(String(message.data)) as LiveEvent;
-        if (event.type === 'pong') lastPongAt = Date.now();
         onEvent(event);
       } catch {
         // Ignore malformed frames; the REST history remains the source of truth.
       }
     };
-    socket.onerror = () => {
-      // A late error from an old socket must never close the newer connection.
-      if (activeSocket === socket) activeSocket.close();
-    };
+    socket.onerror = () => socket?.close();
     socket.onclose = () => {
-      // Ignore delayed close events from superseded sockets. Their timers and
-      // retry state belong to the current connection and must remain untouched.
-      if (activeSocket !== socket) return;
       if (heartbeat) clearInterval(heartbeat);
-      if (stableConnectionTimer) clearTimeout(stableConnectionTimer);
       heartbeat = undefined;
-      stableConnectionTimer = undefined;
-      socket = null;
       if (!stopped) scheduleRetry();
     };
   };
@@ -123,13 +72,12 @@ export function createLiveSocket(onEvent: (event: LiveEvent) => void, onStatus: 
     stopped = true;
     if (retryTimer) clearTimeout(retryTimer);
     if (heartbeat) clearInterval(heartbeat);
-    if (stableConnectionTimer) clearTimeout(stableConnectionTimer);
     socket?.close();
   };
 }
 
 export async function reconcileObservationHistory(): Promise<ObservationHistory> {
-  const response = await authorizedFetch(`${APP_CONFIG.apiBaseUrl}/api/v1/observations?limit=100`, {
+  const response = await fetch(`${APP_CONFIG.apiBaseUrl}/api/v1/observations?limit=100`, {
     signal: AbortSignal.timeout(8000),
   });
   if (!response.ok) throw new Error(`History reconciliation failed (${response.status})`);

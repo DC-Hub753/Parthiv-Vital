@@ -1,88 +1,68 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-
-vi.mock('../services/config.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../services/config.ts')>();
-  return { ...actual, APP_CONFIG: { ...actual.APP_CONFIG, demoMode: false } };
-});
-
 import { LoginPage } from './LoginPage';
 import { ProtectedRoute } from '../components/ProtectedRoute';
-import { AuthProvider } from '../store/AuthContext';
-
-function renderWithAuth(initialEntry: string) {
-  return render(
-    <AuthProvider>
-      <MemoryRouter initialEntries={[initialEntry]}>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/dashboard" element={<div>Dashboard mock</div>} />
-          <Route element={<ProtectedRoute />}>
-            <Route path="/protected" element={<div>Protected mock</div>} />
-          </Route>
-        </Routes>
-      </MemoryRouter>
-    </AuthProvider>,
-  );
-}
 
 beforeEach(() => {
   sessionStorage.clear();
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-    ok: true,
-    status: 200,
-    json: async () => ({
-      access_token: 'test-access-token',
-      expires_in: 900,
-      role: 'nurse',
-      username: 'nurse',
-      full_name: 'Test Nurse',
-    }),
-  }));
 });
 
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
+describe('demo role login', () => {
+  it('fills the selected role credentials and opens the dashboard', () => {
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/dashboard" element={<div>Dashboard mock</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
 
-describe('authenticated login', () => {
-  it('submits credentials to the API and opens the dashboard', async () => {
-    renderWithAuth('/login');
+    fireEvent.click(screen.getByRole('button', { name: /Nurse/i }));
 
-    expect(screen.queryByText(/Demo Role Quick-Fill/i)).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText(/Username/i), { target: { value: 'nurse' } });
-    fireEvent.change(screen.getByLabelText(/Password/i), { target: { value: 'NursePass123!' } });
-    fireEvent.click(screen.getByRole('button', { name: /Sign in/i }));
+    expect(screen.getByLabelText(/Username/i)).toHaveValue('nurse.demo');
+    expect(screen.getByLabelText(/Demo password/i)).toHaveValue('demo-access');
 
-    expect(await screen.findByText('Dashboard mock')).toBeInTheDocument();
-    expect(JSON.parse(sessionStorage.getItem('vitalguard.operator.session') || '{}')).toMatchObject({
+    fireEvent.click(screen.getByRole('button', { name: /Open demo workspace/i }));
+
+    expect(screen.getByText('Dashboard mock')).toBeInTheDocument();
+    expect(JSON.parse(sessionStorage.getItem('vg-demo-session') || '{}')).toMatchObject({
       role: 'nurse',
-      username: 'nurse',
-      token: 'test-access-token',
+      username: 'nurse.demo',
     });
   });
 
-  it('shows an authentication error for rejected credentials', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false,
-      status: 401,
-      json: async () => ({}),
-    }));
+  it('requires a demo role selection with matching credentials', () => {
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/dashboard" element={<div>Dashboard mock</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
 
-    renderWithAuth('/login');
     fireEvent.change(screen.getByLabelText(/Username/i), { target: { value: 'someone-else' } });
-    fireEvent.change(screen.getByLabelText(/Password/i), { target: { value: 'wrong-password' } });
-    fireEvent.click(screen.getByRole('button', { name: /Sign in/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Open demo workspace/i }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/Invalid username or password/i);
+    expect(screen.getByRole('alert')).toHaveTextContent(/Choose a demo role/i);
     expect(screen.queryByText('Dashboard mock')).not.toBeInTheDocument();
   });
 
-  it('redirects to login when no authenticated session exists', () => {
-    renderWithAuth('/protected');
+  it('redirects to login when no demo session exists', () => {
+    render(
+      <MemoryRouter initialEntries={['/dashboard']}>
+        <Routes>
+          <Route path="/login" element={<div>Login route</div>} />
+          <Route element={<ProtectedRoute />}>
+            <Route path="/dashboard" element={<div>Dashboard mock</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
 
-    expect(screen.getByRole('heading', { name: /Clinical Portal Login/i })).toBeInTheDocument();
-    expect(screen.queryByText('Protected mock')).not.toBeInTheDocument();
+    expect(screen.getByText('Login route')).toBeInTheDocument();
+    expect(screen.queryByText('Dashboard mock')).not.toBeInTheDocument();
   });
 });
