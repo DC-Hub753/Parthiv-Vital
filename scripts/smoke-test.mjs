@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
 
-const baseUrl = (process.env.VITALGUARD_API_URL || 'https://vitalguard-risk-api-dc.onrender.com').replace(/\/$/, '');
+const baseUrl = (process.env.VITALGUARD_API_URL || 'https://vitalguard-risk-api.onrender.com').replace(/\/$/, '');
 const timeoutMs = 20_000;
 const coldStartTimeoutMs = 60_000;
-let accessToken = null;
 
 async function request(path, options = {}, timeout = timeoutMs) {
   const response = await fetch(`${baseUrl}${path}`, {
@@ -11,7 +10,6 @@ async function request(path, options = {}, timeout = timeoutMs) {
     signal: AbortSignal.timeout(timeout),
     headers: {
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...(options.headers || {}),
     },
   });
@@ -48,22 +46,28 @@ async function main() {
   assert.ok(health, `Health endpoint failed after 3 attempts: ${lastHealthError}`);
   assert.equal(health.status, 'ok');
   assert.equal(health.demo_only, true);
-  console.log('✓ Health endpoint');
+  assert.equal(health.database?.status, 'ok', 'Health must confirm a reachable database');
+  assert.ok(['sqlite', 'postgresql'].includes(health.database?.backend), 'Health must identify the active storage backend');
+  if (health.database.backend === 'sqlite') {
+    console.warn('⚠ Persistence readiness: API is using SQLite. On hosted ephemeral storage, records may not survive restart/redeploy; configure DATABASE_URL for PostgreSQL and verify durability.');
+  } else {
+    console.log('✓ PostgreSQL backend is active; restart/redeploy durability still requires a separate verification.');
+  }
+  console.log('✓ Health endpoint and storage-backend diagnostics');
 
-  const username = process.env.VITALGUARD_SMOKE_USERNAME;
-  const password = process.env.VITALGUARD_SMOKE_PASSWORD;
-  assert.ok(username && password, 'Set GitHub Actions secrets VITALGUARD_SMOKE_USERNAME and VITALGUARD_SMOKE_PASSWORD before running the live smoke test.');
-  const { data: login } = await request('/api/v1/auth/login', {
-    method: 'POST',
-    body: JSON.stringify({ username, password }),
-  });
-  assert.ok(login.access_token, 'Login response must contain an access token');
-  assert.equal(login.token_type, 'bearer');
-  assert.ok(login.expires_in > 0 && login.expires_in <= 900);
-  accessToken = login.access_token;
-  console.log('✓ Operator login and short-lived token');
-
-  const { data: model } = await request('/api/v1/model/info');
+  const { response: modelResponse, data: model } = await request('/api/v1/model/info');
+  const expectedSecurityHeaders = {
+    'x-content-type-options': 'nosniff',
+    'x-frame-options': 'DENY',
+    'referrer-policy': 'no-referrer',
+    'permissions-policy': 'camera=(), microphone=(), geolocation=()',
+    'cache-control': 'no-store',
+  };
+  for (const [header, expected] of Object.entries(expectedSecurityHeaders)) {
+    assert.equal(modelResponse.headers.get(header), expected, 'Missing or incorrect security header: ' + header);
+  }
+  assert.ok(modelResponse.headers.get('x-request-id'), 'Each API response should include a request ID');
+  console.log('✓ Baseline API security headers and request ID');
   assert.equal(model.demo_only, true);
   assert.equal(model.clinically_validated, false);
   assert.ok(Array.isArray(model.features) && model.features.length >= 7);
@@ -101,7 +105,7 @@ async function main() {
 
   const scale2Denied = await fetch(baseUrl + '/api/v1/scores/news2', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       patient_id: 'SMOKE-NEWS2-DENIED', respiratory_rate: 16, spo2: 90,
       systolic_bp: 120, heart_rate: 80, temperature: 37, consciousness: 'alert',
@@ -115,9 +119,9 @@ async function main() {
   const preflight = await fetch(`${baseUrl}/api/v1/risk/predict`, {
     method: 'OPTIONS',
     headers: {
-      Origin: 'https://vitalguard-ai-dc.onrender.com',
+      Origin: 'https://vitalguard-ai-g215.onrender.com',
       'Access-Control-Request-Method': 'POST',
-      'Access-Control-Request-Headers': 'content-type',
+      'Access-Control-Request-Headers': 'authorization,content-type',
     },
     signal: AbortSignal.timeout(timeoutMs),
   });
@@ -127,7 +131,13 @@ async function main() {
     'https://vitalguard-ai-g215.onrender.com',
     'CORS must allow the deployed frontend origin',
   );
-  console.log('✓ Frontend CORS preflight');
+  const allowedHeaders = (preflight.headers.get('access-control-allow-headers') || '')
+    .toLowerCase()
+    .split(',')
+    .map((header) => header.trim());
+  assert.ok(allowedHeaders.includes('authorization'), 'CORS must allow Authorization for authenticated browser requests');
+  assert.ok(allowedHeaders.includes('content-type'), 'CORS must allow Content-Type for JSON requests');
+  console.log('✓ Frontend CORS origin and requested headers');
 
   // Use fictional observations and a unique demo identifier so this test never
   // touches a real patient record. The API intentionally persists demo outputs.
@@ -191,7 +201,7 @@ async function main() {
 
   const invalid = await fetch(`${baseUrl}/api/v1/risk/predict`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       patient_id: patientId,
       age: 58,

@@ -12,11 +12,9 @@ import { HeroPatient, RecentAlerts, filterCohort } from '../components/dashboard
 import { LiveEcg } from '../components/ui/premium.tsx';
 import { RISK_BANDS } from '../theme/tokens.ts';
 import { useSimulation } from '../store/useSimulation.ts';
-import { DataQualityPanel } from '../components/dashboard/DataQualityPanel.tsx';
-import { BackendObservationHistory } from '../components/dashboard/BackendObservationHistory.tsx';
 
 export function DashboardPage() {
-  const { patients, risks, latest, alerts, prioritization, connectionStatus } = useSimulation();
+  const { patients, risks, latest, alerts, tick, running } = useSimulation();
   const [filters, setFilters] = useFilterState();
   const filtered = useMemo(() => filterCohort(patients, risks, filters), [patients, risks, filters]);
   const dist = useMemo(() => {
@@ -29,14 +27,11 @@ export function DashboardPage() {
     ];
   }, [risks]);
   const openAlerts = alerts.filter((a) => a.status === 'open').length;
-
-  const topPriorityId = prioritization[0]?.patient_id || 'P-SIM-003';
-  const hero = risks[topPriorityId] || risks['P-SIM-003'];
-  const heroVitals = latest[topPriorityId] || latest['P-SIM-003'];
-  const heroPatient = patients.find((p) => p.id === topPriorityId) || patients.find((p) => p.id === 'P-SIM-003');
-
+  const hero = risks['P-SIM-003'];
+  const heroVitals = latest['P-SIM-003'];
+  const heroPatient = patients.find((p) => p.id === 'P-SIM-003');
   return (
-    <Shell title="Command Center" subtitle="Authoritative clinical intelligence & patient prioritization">
+    <Shell title="Command Center" subtitle="Real-time clinical intelligence overview">
       <section className="clinical-panel relative overflow-hidden rounded-[24px] p-6 sm:p-8 lg:p-9" aria-label="Clinical intelligence overview">
         <div className="absolute inset-0 vg-grid-bg opacity-35" aria-hidden />
         <div className="absolute -top-24 right-[8%] h-72 w-72 rounded-full blur-3xl opacity-40 animate-vg-drift" style={{ background: 'radial-gradient(circle,rgba(94,234,212,.65),transparent 70%)' }} aria-hidden />
@@ -45,25 +40,23 @@ export function DashboardPage() {
         </div>
         <div className="relative max-w-2xl">
           <p className="eyebrow clinical-kicker inline-flex items-center gap-2">
-            <span className={`h-1.5 w-1.5 rounded-full ${connectionStatus === 'connected' ? 'bg-emerald-500 pulse-dot' : 'bg-slate-300'}`} aria-hidden />
-            CLINICAL INTELLIGENCE WORKSPACE · LIVE TELEMETRY
+            <span className={`h-1.5 w-1.5 rounded-full ${running ? 'bg-emerald-500 pulse-dot' : 'bg-slate-300'}`} aria-hidden />
+            SIMULATED CLINICAL WORKSPACE · t+{tick}
           </p>
           <h2 className="font-display text-[32px] sm:text-[40px] leading-[1.06] font-extrabold tracking-tight mt-2 text-slate-900 dark:text-slate-50">See the signals.<br className="hidden sm:block" /> Prioritise the review.</h2>
-          <p className="text-sm sm:text-[15px] clinical-muted mt-3 leading-relaxed max-w-xl">A unified view of {patients.length} monitored patients, authoritative physiological observations, calibrated XGBoost deterioration predictions, and NEWS2 triage prioritization.</p>
+          <p className="text-sm sm:text-[15px] clinical-muted mt-3 leading-relaxed max-w-xl">A unified view of {patients.length} synthetic patient profiles, changing vital-sign scenarios, risk signals and review priorities. For demonstration and evaluation only.</p>
           <div className="mt-5 flex flex-wrap items-center gap-2.5">
-            <Link to={`/patients/${topPriorityId}`} className="btn-primary">Review priority patient ({topPriorityId}) <ArrowUpRight size={15} aria-hidden /></Link>
-            <Link to="/alerts" className="btn-secondary">Open alert center <span className="inline-grid min-w-5 h-5 px-1 place-items-center rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-[11px] font-bold">{openAlerts}</span></Link>
+            <Link to="/patients/P-SIM-003" className="btn-primary">Review priority patient <ArrowUpRight size={15} aria-hidden /></Link>
+            <Link to="/alerts" className="btn-secondary">Open alert center <span className="inline-grid min-w-5 h-5 px-1 place-items-center rounded-md bg-slate-100 text-slate-700 text-[11px]">{openAlerts}</span></Link>
           </div>
         </div>
       </section>
       <div className="mt-6">
         <PageHeader eyebrow="Patient monitoring" title="Patient Monitoring Overview"
-          subtitle="Real-time patient state, persistent observations, and dynamic triage rankings."
+          subtitle="Live patient state, risk signals and review priorities in one place."
           crumbs={[{ label: 'Dashboard' }]} />
       </div>
       <div className="mt-5"><SummaryCards patients={patients} risks={risks} openAlerts={openAlerts} /></div>
-      <DataQualityPanel />
-      <BackendObservationHistory />
       {hero && heroVitals && heroPatient && <HeroPatient hero={hero} vitals={heroVitals} patient={heroPatient} />}
       <div className="mt-4"><FilterBar value={filters} onChange={setFilters} resultCount={filtered.length} /></div>
       <div className="mt-4 grid xl:grid-cols-[minmax(0,1fr)_370px] gap-4 items-start">
