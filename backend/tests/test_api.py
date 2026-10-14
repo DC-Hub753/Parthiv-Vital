@@ -13,7 +13,7 @@ def valid_payload():
 def test_health_endpoint(client):
  response=client.get("/health"); assert response.status_code==200; body=response.json()
  assert body["status"]=="ok" and body["demo_only"] is True
- assert body["database_backend"] in {"sqlite","postgresql"} and body["schema_ready"] is True and body["schema_version"]==1
+ assert body["database"]["backend"] in {"sqlite","postgresql"} and body["database"]["schema_ready"] is True and body["database"]["schema_version"]==2 and "broker" in body
 
 def test_model_info_is_explicit_about_synthetic_data(client):
  response=client.get("/api/v1/model/info"); assert response.status_code==200; body=response.json()
