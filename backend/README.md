@@ -48,7 +48,11 @@ curl -X POST http://127.0.0.1:8000/api/v1/risk/predict \
 
 ## Storage and deployment
 
-SQLite defaults to `backend/vitalguard_demo.sqlite3`. Set `VITALGUARD_DB_PATH` to change the location. On Render, a free service's local filesystem is ephemeral; history may be lost on redeploy/restart. Configure a persistent disk and point `VITALGUARD_DB_PATH` into its mounted directory if durable history is required. Do not treat this SQLite setup as a production patient-record system.
+Local development/tests use SQLite. Hosted persistence requires a private `DATABASE_URL` pointing to PostgreSQL. Do not assume PostgreSQL is active just because the API responds: check `GET /health` for `database_backend`, `database_configured`, `schema_version`, and `schema_ready`. A healthy hosted deployment should report PostgreSQL and a ready schema.
+
+The SQLAlchemy engine is reused for the process lifetime and uses bounded pool/connection/statement timeouts. Schema setup runs at startup through an additive versioned migration; request handlers do not create tables. Incompatible existing schemas fail closed instead of being automatically altered. Local SQLite is for development/tests, not a production patient-record store.
+
+See [Phase 1 persistence hardening](../docs/PHASE_1_PERSISTENCE.md) for configuration, migration safety, and an operator-run backup/restore rehearsal. No hosted migration or backup/restore is performed automatically by this code.
 
 Set `CORS_ORIGINS` to a comma-separated list of exact permitted browser origins. The deployed frontend origin is allowed by default.
 
