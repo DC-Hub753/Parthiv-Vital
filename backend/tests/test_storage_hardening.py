@@ -28,7 +28,7 @@ def test_migration_is_idempotent_and_records_schema_version(isolated_db):
     status = storage_status()
     assert status["backend"] == "sqlite"
     assert status["schema_ready"] is True
-    assert status["schema_version"] == 1
+    assert status["schema_version"] == 2
 
 
 def test_observation_survives_engine_disposal_and_reconnect(isolated_db):
