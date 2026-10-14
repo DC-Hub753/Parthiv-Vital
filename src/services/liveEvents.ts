@@ -40,7 +40,8 @@ export function subscribeLiveEvents(onEvent:(event:LiveEvent)=>void,onState?:(st
   socket.onmessage=(message)=>{
    queue=queue.then(async()=>{
     const parsed=JSON.parse(String(message.data)) as Partial<LiveEvent>&{event_type?:string};
-    if(parsed.event_type==='stream.ready'||!parsed.event_id||!Number.isSafeInteger(parsed.event_seq))return;
+    if(parsed.event_type==='stream.ready'){try{await reconcile();}catch{onState?.('degraded');}return;}
+    if(!parsed.event_id||!Number.isSafeInteger(parsed.event_seq))return;
     const event=parsed as LiveEvent;
     if(event.event_seq>cursor.lastSequence+1){try{await reconcile();}catch{onState?.('degraded');}}
     deliver(event);
