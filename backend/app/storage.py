@@ -1,13 +1,15 @@
-"""Database repository for synthetic demo predictions.
+"""Durable SQLAlchemy repository for synthetic demo predictions.
 
-Uses DATABASE_URL when configured (PostgreSQL on a hosted deployment), and
-falls back to a local SQLite file for development. This prototype must not be
-used with real patient data.
+Hosted deployments must explicitly configure DATABASE_URL to use PostgreSQL.
+SQLite is retained for local development and tests only. Schema changes are
+handled by versioned, additive migrations; request handlers never create schema.
+This prototype must not be used with real patient data.
 """
 from __future__ import annotations
 
 import json
 import os
+import threading
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -24,9 +26,12 @@ from sqlalchemy import (
     create_engine,
     func,
     insert,
+    inspect,
     select,
 )
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.pool import StaticPool
 
 _DEFAULT_DB = Path(__file__).resolve().parents[1] / "vitalguard_demo.sqlite3"
 _METADATA = MetaData()
@@ -47,9 +52,17 @@ Index(
     _OBSERVATIONS.c.id.desc(),
 )
 
+class StorageError(RuntimeError):
+    """Safe-to-report storage failure; original details stay in server logs."""
+
+
+_ENGINE_LOCK = threading.RLock()
+_ENGINES: dict[str, Engine] = {}
+_INITIALIZED_URLS: set[str] = set()
+
 
 def _database_url() -> str:
-    """Prefer a hosted DATABASE_URL; preserve SQLite as the local default."""
+    """Prefer hosted DATABASE_URL; use a file-backed SQLite DB for local work."""
     configured = os.getenv("DATABASE_URL", "").strip()
     if configured:
         if configured.startswith("postgres://"):
@@ -67,17 +80,104 @@ def _database_url() -> str:
 
 
 def _engine() -> Engine:
+    """Return a process-reused engine with bounded pool and connection timeouts."""
     url = _database_url()
-    connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
-    return create_engine(url, connect_args=connect_args, pool_pre_ping=True)
+    with _ENGINE_LOCK:
+        if url in _ENGINES:
+            return _ENGINES[url]
+
+        connect_args: dict[str, Any]
+        options: dict[str, Any] = {"pool_pre_ping": True, "pool_recycle": 1800}
+        if url.startswith("sqlite"):
+            connect_args = {"check_same_thread": False, "timeout": 10}
+            if url.endswith(":memory:"):
+                options["poolclass"] = StaticPool
+        else:
+            connect_args = {
+                "connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT_SECONDS", "5")),
+                "options": f"-c statement_timeout={int(os.getenv('DB_STATEMENT_TIMEOUT_MS', '10000'))}",
+            }
+            options.update(
+                pool_size=max(1, int(os.getenv("DB_POOL_SIZE", "5"))),
+                max_overflow=max(0, int(os.getenv("DB_MAX_OVERFLOW", "5"))),
+                pool_timeout=max(1, int(os.getenv("DB_POOL_TIMEOUT_SECONDS", "10"))),
+            )
+
+        try:
+            engine = create_engine(url, connect_args=connect_args, **options)
+            if url.startswith("sqlite"):
+                from sqlalchemy import event
+
+                @event.listens_for(engine, "connect")
+                def _sqlite_pragmas(dbapi_connection, _connection_record):
+                    cursor = dbapi_connection.cursor()
+                    cursor.execute("PRAGMA busy_timeout=10000")
+                    cursor.execute("PRAGMA foreign_keys=ON")
+                    cursor.close()
+
+            _ENGINES[url] = engine
+            return engine
+        except (SQLAlchemyError, ValueError) as exc:
+            raise StorageError("Database engine configuration failed.") from exc
 
 
 def initialize_storage() -> None:
-    engine = _engine()
+    """Apply additive migrations once per configured URL, not on each request."""
+    url = _database_url()
+    with _ENGINE_LOCK:
+        if url in _INITIALIZED_URLS:
+            return
+        engine = _engine()
+        try:
+            # Import lazily to avoid a module cycle: migrations share this module's table.
+            from .migrations import migrate
+
+            with engine.begin() as connection:
+                migrate(connection)
+            _INITIALIZED_URLS.add(url)
+        except Exception as exc:
+            raise StorageError("Database schema initialization failed; see server logs.") from exc
+
+
+def storage_status() -> dict[str, Any]:
+    """Inspect active backend/schema without creating or repairing anything."""
+    url = _database_url()
+    parsed = urlsplit(url)
+    backend = "postgresql" if parsed.scheme.startswith("postgres") else (
+        "sqlite" if parsed.scheme.startswith("sqlite") else "unknown"
+    )
+    status: dict[str, Any] = {
+        "backend": backend,
+        "configured": bool(os.getenv("DATABASE_URL", "").strip()) if backend == "postgresql" else True,
+        "schema_version": None,
+        "schema_ready": False,
+    }
     try:
-        _METADATA.create_all(engine)
-    finally:
-        engine.dispose()
+        engine = _engine()
+        with engine.connect() as connection:
+            inspector = inspect(connection)
+            tables = set(inspector.get_table_names())
+            if "observations" not in tables or "vitalguard_storage_migrations" not in tables:
+                status["reason"] = "required schema or migration ledger is missing"
+                return status
+            columns = {column["name"] for column in inspector.get_columns("observations")}
+            required = {"id", "patient_id", "created_at", "input_json", "prediction_json", "model_version"}
+            if not required.issubset(columns):
+                status["reason"] = "observations schema is incompatible"
+                return status
+            from .migrations import _MIGRATIONS, SCHEMA_VERSION
+
+            version = connection.execute(
+                select(_MIGRATIONS.c.version).order_by(_MIGRATIONS.c.version.desc()).limit(1)
+            ).scalar_one_or_none()
+            status["schema_version"] = version
+            status["schema_ready"] = version == SCHEMA_VERSION
+            if not status["schema_ready"]:
+                status["reason"] = "database migration version is incomplete or unsupported"
+    except Exception:
+        # Never return DSNs, credentials, hostnames, or driver exception text to clients.
+        status["reason"] = "database connection or schema inspection failed"
+    return status
 
 
 def save_observation(
@@ -85,25 +185,26 @@ def save_observation(
     inputs: dict[str, Any],
     prediction: dict[str, Any],
 ) -> dict[str, Any]:
+    initialize_storage()
     engine = _engine()
     try:
-        _METADATA.create_all(engine)
         with engine.begin() as connection:
-            result = connection.execute(
-                insert(_OBSERVATIONS).values(
+            observation_id = connection.execute(
+                insert(_OBSERVATIONS)
+                .values(
                     patient_id=patient_id,
-                    input_json=json.dumps(inputs, separators=(",", ":")),
-                    prediction_json=json.dumps(prediction, separators=(",", ":")),
+                    input_json=json.dumps(inputs, separators=(",", ":"), allow_nan=False),
+                    prediction_json=json.dumps(prediction, separators=(",", ":"), allow_nan=False),
                     model_version=prediction["model_version"],
                 )
-            )
-            observation_id = result.inserted_primary_key[0]
+                .returning(_OBSERVATIONS.c.id)
+            ).scalar_one()
             row = connection.execute(
                 select(_OBSERVATIONS).where(_OBSERVATIONS.c.id == observation_id)
             ).mappings().one()
         return _serialize(row)
-    finally:
-        engine.dispose()
+    except (SQLAlchemyError, ValueError, KeyError, TypeError) as exc:
+        raise StorageError("Observation could not be persisted.") from exc
 
 
 def list_observations(
@@ -111,9 +212,11 @@ def list_observations(
     limit: int = 50,
     before_id: int | None = None,
 ) -> list[dict[str, Any]]:
+    if not 1 <= limit <= 100:
+        raise ValueError("limit must be between 1 and 100")
+    initialize_storage()
     engine = _engine()
     try:
-        _METADATA.create_all(engine)
         query = select(_OBSERVATIONS)
         if patient_id is not None:
             query = query.where(_OBSERVATIONS.c.patient_id == patient_id)
@@ -123,8 +226,8 @@ def list_observations(
         with engine.connect() as connection:
             rows = connection.execute(query).mappings().all()
         return [_serialize(row) for row in rows]
-    finally:
-        engine.dispose()
+    except SQLAlchemyError as exc:
+        raise StorageError("Observation history could not be read.") from exc
 
 
 def _serialize(row: Any) -> dict[str, Any]:
