@@ -9,7 +9,7 @@ from .model import FEATURES, ModelArtifactError, active_model_metadata, explain,
 from .model_evaluation import evaluation_report
 from .schemas import RiskPrediction, VitalInput
 from .simulator_routes import router as simulator_router
-from .storage import StorageError, initialize_storage, list_events_after, list_observations, list_pending_events, mark_event_published, save_observation, storage_status
+from .storage import StorageError, initialize_storage, list_events_after, list_observations, list_pending_events, mark_event_published, record_event_attempt, save_observation, storage_status
 logger=logging.getLogger(__name__)
 
 async def _outbox_worker():
@@ -23,9 +23,11 @@ async def _outbox_worker():
                 for event in pending:
                     if await broker.publish(event):
                         mark_event_published(event["event_id"])
+                    else:
+                        record_event_attempt(event["event_id"])
         except asyncio.CancelledError: raise
         except Exception: logger.exception("Event outbox dispatch failed; events remain recoverable")
-        await asyncio.sleep(float(os.getenv("EVENT_OUTBOX_POLL_SECONDS","1")))
+        await asyncio.sleep(max(0.1,min(10.0,float(os.getenv("EVENT_OUTBOX_POLL_SECONDS","1")))))
 
 @asynccontextmanager
 async def lifespan(_app:FastAPI):
