@@ -11,6 +11,8 @@ The application remains a **synthetic-data software prototype, not a clinically 
 - The frontend's production fallback API URL pointed at the separate VitalGuard deployment. It now points at this repository's `parthiv-vital-api-backend` service.
 - Production previously defaulted to demo mode unless an environment variable explicitly disabled it. Production now defaults to API mode; local development remains demo-friendly. Set `VITE_DEMO_MODE=true` only for an explicitly labelled demo.
 - API patient-list failures were silently replaced with synthetic patient records. API mode now propagates the error so backend outages cannot masquerade as live patient data.
+- Demo role quick-fill and local-only authentication are now limited to explicit demo mode. Production login must be accepted by the backend; a network failure cannot create a fake local authenticated session.
+- The repository's browser smoke and manual API smoke workflows now target the Parthiv-Vital Render services, not the separate VitalGuard deployment.
 
 ## Render configuration
 
@@ -42,7 +44,6 @@ The repository's Render services include a second backend service named `parthiv
 5. Confirm API errors are shown as errors and never silently replaced by demo patient data.
 6. Confirm the separate VitalGuard-AI Render service IDs remain unchanged.
 
-
 ## Login regression coverage
 
-The login tests now mount the same authentication provider used by the application and verify successful API login, rejected credentials, and unauthenticated route protection. These tests cover the current production login contract rather than the removed demo-session contract.
+The login tests now mount the same authentication provider used by the application and verify successful API login, rejected credentials, and unauthenticated route protection. They validate the current production login contract rather than the removed demo-session contract.
