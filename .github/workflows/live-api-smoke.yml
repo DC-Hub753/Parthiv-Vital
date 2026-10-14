@@ -1,13 +1,13 @@
 name: Live API smoke test
 
 on:
-  # Run manually after the backend deploy is confirmed and smoke credentials are configured.
+  # Run manually after the Parthiv backend deploy is confirmed and smoke credentials are configured.
   workflow_dispatch:
     inputs:
       api_base_url:
-        description: "Deployed VitalGuard API base URL"
+        description: "Deployed Parthiv-Vital API base URL"
         required: false
-        default: "https://vitalguard-risk-api-dc.onrender.com"
+        default: "https://parthiv-vital-api-backend.onrender.com"
         type: string
 
 permissions:
