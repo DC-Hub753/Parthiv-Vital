@@ -16,6 +16,8 @@ async def _outbox_worker():
     """Retry durable events until Redis accepts them; duplicate delivery is expected."""
     while True:
         try:
+            if broker.configured and not broker.healthy:
+                await broker.ensure_connected()
             if broker.configured and broker.healthy:
                 pending=list_pending_events(limit=50)
                 for event in pending:
