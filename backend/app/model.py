@@ -15,6 +15,7 @@ from sklearn.preprocessing import StandardScaler
 
 FEATURES=("age","heart_rate","spo2","systolic_bp","diastolic_bp","temperature","respiratory_rate")
 SYNTHETIC_MODEL_VERSION="synthetic-logreg-0.3.0"
+MODEL_VERSION=SYNTHETIC_MODEL_VERSION
 class ModelArtifactError(RuntimeError):
     """Configured artifact is absent or incompatible; never silently fallback."""
 
