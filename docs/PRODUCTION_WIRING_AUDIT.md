@@ -41,3 +41,8 @@ The repository's Render services include a second backend service named `parthiv
 4. Verify login, authenticated patient CRUD, observation persistence, alert workflow, and browser WebSocket reconnect against the Parthiv backend.
 5. Confirm API errors are shown as errors and never silently replaced by demo patient data.
 6. Confirm the separate VitalGuard-AI Render service IDs remain unchanged.
+
+
+## Login regression coverage
+
+The login tests now mount the same authentication provider used by the application and verify successful API login, rejected credentials, and unauthenticated route protection. These tests cover the current production login contract rather than the removed demo-session contract.
