@@ -19,12 +19,12 @@ async def _outbox_worker():
             if broker.configured and not broker.healthy:
                 await broker.ensure_connected()
             if broker.configured and broker.healthy:
-                pending=list_pending_events(limit=50)
+                pending=await asyncio.to_thread(list_pending_events,limit=50)
                 for event in pending:
                     if await broker.publish(event):
-                        mark_event_published(event["event_id"])
+                        await asyncio.to_thread(mark_event_published,event["event_id"])
                     else:
-                        record_event_attempt(event["event_id"])
+                        await asyncio.to_thread(record_event_attempt,event["event_id"])
         except asyncio.CancelledError: raise
         except Exception: logger.exception("Event outbox dispatch failed; events remain recoverable")
         await asyncio.sleep(max(0.1,min(10.0,float(os.getenv("EVENT_OUTBOX_POLL_SECONDS","1")))))
@@ -75,11 +75,11 @@ def model_info():
 def model_evaluation(): return evaluation_report()
 @app.post("/api/v1/risk/predict",response_model=RiskPrediction)
 async def predict(payload:VitalInput,request:Request):
-    values=payload.model_dump(exclude={"patient_id"}); probability=predict_probability(values); score=round(probability*100); meta=active_model_metadata()
+    values=payload.model_dump(exclude={"patient_id"}); probability=await asyncio.to_thread(predict_probability,values); score=round(probability*100); meta=active_model_metadata()
     result=RiskPrediction(patient_id=payload.patient_id,risk_score=score,risk_level=risk_level(score),model_probability=round(probability,4),factors=explain(values),model_version=meta["model_version"])
     session_id=request.headers.get("X-Session-ID")
     if session_id and len(session_id)>128: session_id=session_id[:128]
-    saved=save_observation(payload.patient_id,values,result.model_dump(),session_id=session_id)
+    saved=await asyncio.to_thread(save_observation,payload.patient_id,values,result.model_dump(),session_id=session_id)
     await publish_after_commit(saved["event"])
     return result.model_copy(update={"observation_id":saved["id"],"created_at":saved["created_at"]})
 @app.get("/api/v1/observations")
