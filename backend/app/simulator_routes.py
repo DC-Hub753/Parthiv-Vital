@@ -4,7 +4,7 @@ from typing import Literal
 from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict, Field
 
-from .model import MODEL_VERSION, explain, predict_probability, risk_level
+from .model import active_model_metadata, explain, predict_probability, risk_level
 from .schemas import RiskPrediction
 from .simulator import observation_for_step
 from .storage import save_observation
@@ -36,7 +36,7 @@ def submit_demo_observation(payload: SimulationRequest):
         risk_level=risk_level(score),
         model_probability=round(probability, 4),
         factors=explain(values),
-        model_version=MODEL_VERSION,
+        model_version=active_model_metadata()["model_version"],
     )
     saved = save_observation(payload.patient_id, values, result.model_dump())
     return result.model_copy(
