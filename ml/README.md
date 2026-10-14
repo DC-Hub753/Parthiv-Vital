@@ -1,17 +1,14 @@
-# Reproducible ML pipeline
+# Reproducible ML benchmark pipeline
 
-This pipeline is separate from API startup. No restricted dataset is downloaded. Clinical training is blocked until a dataset is approved and its outcome/label contract is documented. Current smoke-test metrics on heuristic/synthetic labels are engineering checks only, never clinical performance evidence.
-
-## Commands
+Training is an offline command and never runs during API startup. No restricted dataset is fetched. Clinical training and algorithm selection remain blocked until an approved dataset, target definition, and permitted use are documented.
 
 ```bash
-python -m pip install -r backend/requirements.txt
-python ml/prepare_dataset.py --input /secure/path/approved.csv --output /secure/path/validated.csv
-python ml/train.py --input /secure/path/validated.csv --dataset-version approved-dataset-v1 --output-dir ml/artifacts
-python ml/evaluate.py --artifact ml/artifacts/vitalguard_logreg.joblib --input /secure/path/independent-test.csv
-pytest ml/tests -q
+python ml/prepare_dataset.py --input /secure/approved.csv --output /secure/validated.csv
+python ml/train.py --input /secure/validated.csv --dataset-version approved-v1 --output-dir /secure/artifacts
+python ml/evaluate.py --artifact /secure/artifacts/vitalguard_logistic_regression.joblib --input /secure/independent-test.csv --threshold 0.5 --output /secure/evaluation.json
+pytest ml/tests backend/tests -q
 ```
 
-Input CSV contract: `patient_id`, seven feature columns in `config.yaml`, and binary `target`. Before clinical use, establish the prediction timestamp, future outcome window, cohort inclusion/exclusion, outcome ascertainment, unit conversions, missingness policy, and patient/time split strategy. Never use future-derived data as features. Training makes patient-disjoint train/validation/test groups and fits preprocessing only on train. Keep the test set untouched for threshold selection and hyperparameter tuning.
+All candidates use the same patient-disjoint train/validation/test split and feature order. Logistic regression is mandatory baseline; random forest is available; XGBoost is benchmarked only when installed. Selection uses the predeclared validation metric. Test metrics are reported only after selection. Metrics include ROC-AUC, PR-AUC, sensitivity, specificity, precision, Brier score, artifact size, and approximate inference latency. Calibration curves and operating thresholds require clinical requirements and an adequately sized approved validation cohort.
 
-Artifacts and datasets are excluded from Git. The manifest records dataset and artifact hashes, feature version, seed, split counts, target definition, metrics and a non-clinical status flag. Artifact creation is not evidence of clinical validity. Calibration requires a sufficiently sized independent cohort and should be assessed before any clinical claim.
+Input CSV contract: `patient_id`, seven feature columns, binary `target`. Before clinical use, define prediction time, future outcome window, cohort inclusion/exclusion, label provenance, unit conversions, and missingness rules. The current synthetic target is heuristic-derived and cannot establish which algorithm is clinically best. Never use test data for tuning or threshold selection.
