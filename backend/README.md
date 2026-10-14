@@ -2,7 +2,7 @@
 
 > **Prototype only. Synthetic data. Not for clinical use.**
 
-This FastAPI service trains a small scikit-learn logistic-regression pipeline at process startup using generated synthetic observations and heuristic-generated labels. It stores submitted demo predictions in the SQLAlchemy-backed `observations` table. No real patient dataset is included or loaded.
+This FastAPI service loads a configured, trusted model artifact or lazily builds a synthetic logistic-regression fallback on first inference. Model training and benchmarking are offline commands under `ml/`; no training occurs during API import or server startup. It stores submitted demo predictions in the SQLAlchemy-backed `observations` table. No approved clinical dataset is included or presumed available.
 
 ## Run locally
 
@@ -23,14 +23,14 @@ uvicorn app.main:app --app-dir backend --reload --host 127.0.0.1 --port 8000
 ## Endpoints
 
 - `GET /health` — reports active backend, database configuration, migration version, and schema readiness. Returns 503 when persistence is not ready.
-- `GET /api/v1/model/info` — algorithm, features, and limitations.
+- `GET /api/v1/model/info` — actual active model version, algorithm, feature schema, artifact status, and clinical-validation status.\n- `GET /api/v1/model/evaluation` — configured benchmark manifest and limitations; no fabricated metrics are returned when a manifest is absent.
 - `POST /api/v1/risk/predict` — scores and persists a synthetic observation before returning success.
 - `GET /api/v1/observations?limit=10` — recent history, bounded to 1–100 records.
 - `GET /api/v1/observations?patient_id=DEMO-001` — filter by demo patient.
 - `GET /api/v1/observations?before_id=25&limit=10` — cursor-based older history.
 - `POST /api/v1/demo/observations` — generate and persist a deterministic synthetic observation.
 
-## Database configuration
+## Model artifact configuration\n\nWithout `VITALGUARD_MODEL_PATH`, the service explicitly runs in `synthetic_demo` mode. To load a trained research artifact, set `VITALGUARD_MODEL_PATH` to a trusted immutable `.joblib` file; keep its generated `manifest.json` beside it or set `VITALGUARD_MODEL_MANIFEST`. Optionally set `VITALGUARD_MODEL_VERSION` to an explicit release identifier. The loader checks probability support and feature count/order, and fails closed with HTTP 503 if a configured artifact is missing or incompatible; it does not silently switch to the synthetic fallback. Artifact deserialization is unsafe for untrusted files.\n\nSee [`../ml/README.md`](../ml/README.md) for the reproducible benchmark commands and [`../ml/artifacts/README.md`](../ml/artifacts/README.md) for immutable versioning and rollback. Logistic regression remains the baseline; Random Forest and optional XGBoost comparisons on synthetic labels are engineering smoke tests only. No algorithm is established as clinically superior until an approved dataset and intended outcome are evaluated.\n\n## Database configuration
 
 The active API uses the SQLAlchemy repository in `backend/app/storage.py`. Hosted deployments must explicitly set `DATABASE_URL` in the backend's private hosting environment to a managed PostgreSQL database. The health endpoint identifies the backend actually selected by the configured URL; verify it reports `database_backend: postgresql`, `database_configured: true`, and `schema_ready: true`. Never infer database selection from an environment-variable name alone.
 
