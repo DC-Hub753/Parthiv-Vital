@@ -122,3 +122,18 @@ def test_configured_sqlite_database_url_is_supported(tmp_path, monkeypatch):
     assert len(rows) == 1
     assert rows[0]["inputs"]["spo2"] == 98
     assert rows[0]["prediction"]["risk_score"] == 12
+
+
+
+def test_storage_failure_returns_controlled_503(client, monkeypatch):
+    from app import main
+    from app.storage import StorageError
+
+    def fail_write(*_args, **_kwargs):
+        raise StorageError("internal database details must not be exposed")
+
+    monkeypatch.setattr(main, "save_observation", fail_write)
+    response = client.post("/api/v1/risk/predict", json=valid_payload())
+    assert response.status_code == 503
+    assert response.json()["error"] == "storage_unavailable"
+    assert "internal database details" not in response.text
