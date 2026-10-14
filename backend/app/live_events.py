@@ -14,7 +14,7 @@ async def live_event_stream(websocket:WebSocket):
  try:
   # Replay after subscribing to avoid a replay/subscribe gap. Duplicate delivery is
   # expected at the boundary; event_id/event_seq are stable dedupe keys.
-  events=list_events_after(after_seq=after_seq,limit=500)
+  events=await asyncio.to_thread(list_events_after,after_seq,500)
   for event in events:await websocket.send_json(event)
   await websocket.send_json({"event_type":"stream.ready","schema_version":1,"after_seq":after_seq,"broker_mode":broker.mode,"cross_instance_delivery":broker.configured and broker.healthy})
   while True:
