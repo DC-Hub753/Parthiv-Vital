@@ -4,6 +4,7 @@ export interface LiveEvent {
   event_id: string; event_seq: number; event_type: string; schema_version: number;
   created_at: string; session_id: string | null; observation_id: number; payload: Record<string, unknown>;
 }
+export type VitalGuardEvent = LiveEvent;
 interface EventPage { items: LiveEvent[]; count: number; next_after_seq: number }
 export type LiveState = 'connecting' | 'connected' | 'reconnecting' | 'degraded' | 'closed';
 export class EventCursor {
@@ -54,7 +55,10 @@ export function subscribeLiveEvents(onEvent:(event:LiveEvent)=>void,onState?:(st
  return()=>{closed=true;if(retryTimer)clearTimeout(retryTimer);socket?.close();onState?.('closed');};
 }
 // Compatibility wrapper for callers that only need observation event callbacks.
-export function createLiveSocket(onEvent:(event:LiveEvent)=>void,onStatus:(state:LiveState)=>void){return subscribeLiveEvents(onEvent,onStatus);}
+export type LiveStatus = 'connecting' | 'connected' | 'reconnecting' | 'offline';
+export function createLiveSocket(onEvent:(event:LiveEvent)=>void,onStatus:(state:LiveStatus)=>void){
+ return subscribeLiveEvents(onEvent,(state)=>onStatus(state==='degraded'||state==='closed'?'offline':state));
+}
 export async function reconcileObservationHistory(afterSequence=0):Promise<EventPage>{
  const response=await fetch(`${APP_CONFIG.apiBaseUrl}/api/v1/events?after_seq=${afterSequence}&limit=500`,{signal:AbortSignal.timeout(8000)});
  if(!response.ok)throw new Error(`History reconciliation failed (${response.status})`);
