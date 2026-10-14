@@ -1,24 +1,32 @@
 from contextlib import asynccontextmanager
+import logging
 import os
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from .model import MODEL_VERSION, explain, predict_probability, risk_level
 from .schemas import RiskPrediction, VitalInput
 from .simulator_routes import router as simulator_router
-from .storage import initialize_storage, list_observations, save_observation
+from .storage import StorageError, initialize_storage, list_observations, save_observation, storage_status
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    initialize_storage()
+    try:
+        initialize_storage()
+    except StorageError:
+        # Keep health diagnostics available, but persistence endpoints fail closed.
+        logger.exception("VitalGuard storage initialization failed")
     yield
 
 
 app = FastAPI(
     title="VitalGuard AI Risk Engine",
-    version="0.3.0",
+    version="0.4.0",
     description=(
         "Demo API for synthetic observations and risk-signal visualization. "
         "Not clinically validated and not for clinical use."
@@ -26,6 +34,19 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.include_router(simulator_router)
+
+
+@app.exception_handler(StorageError)
+async def storage_error_handler(_request: Request, _exc: StorageError):
+    return JSONResponse(
+        status_code=503,
+        content={
+            "error": "storage_unavailable",
+            "message": "Persistence is temporarily unavailable. No successful write is reported.",
+            "demo_only": True,
+        },
+    )
+
 
 _default_origins = [
     "http://localhost:5173",
@@ -55,7 +76,22 @@ def root():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "model_version": MODEL_VERSION, "demo_only": True}
+    database = storage_status()
+    healthy = database["schema_ready"]
+    payload = {
+        "status": "ok" if healthy else "degraded",
+        "service": "VitalGuard AI Risk Engine",
+        "model_version": MODEL_VERSION,
+        "database_backend": database["backend"],
+        "database_configured": database["configured"],
+        "schema_version": database["schema_version"],
+        "schema_ready": healthy,
+        "demo_only": True,
+    }
+    if not healthy:
+        payload["database_reason"] = database.get("reason", "schema is not ready")
+        return JSONResponse(status_code=503, content=payload)
+    return payload
 
 
 @app.get("/api/v1/model/info")
