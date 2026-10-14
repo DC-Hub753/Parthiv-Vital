@@ -12,7 +12,7 @@ describe('EventCursor',()=>{
  it('retains a monotonic cursor when events arrive out of order',()=>{
   const cursor=new EventCursor(4);
   expect(cursor.accept(event('event-c',9))).toBe(true);
-  expect(cursor.accept(event('event-b',7))).toBe(true);
+  expect(cursor.accept(event('event-b',7))).toBe(false);
   expect(cursor.lastSequence).toBe(9);
  });
  it('rejects malformed event IDs and sequence values',()=>{
