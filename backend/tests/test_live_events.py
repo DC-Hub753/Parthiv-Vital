@@ -60,8 +60,8 @@ def test_local_fallback_is_explicitly_single_instance(client):
  if health["broker"]["mode"]=="local_single_instance":
   assert health["broker"]["cross_instance_delivery"] is False
 
-@pytest.mark.anyio
-async def test_redis_broker_publishes_stable_event_payload(monkeypatch):
+def test_redis_broker_publishes_stable_event_payload():
+ import asyncio
  from app.event_broker import broker
  class FakeRedis:
   def __init__(self): self.calls=[]
@@ -70,18 +70,18 @@ async def test_redis_broker_publishes_stable_event_payload(monkeypatch):
  try:
   broker.redis_url="redis://unit-test"; broker._redis=fake; broker._healthy=True
   event={"event_id":"stable-id","event_seq":7,"event_type":"observation.created","schema_version":1,"created_at":"2026-10-14T00:00:00Z","session_id":None,"observation_id":7,"payload":{}}
-  assert await broker.publish(event) is True
+  assert asyncio.run(broker.publish(event)) is True
   assert fake.calls[0][0]==broker.channel
   assert '"event_id":"stable-id"' in fake.calls[0][1]
  finally:
   broker.redis_url,broker._redis,broker._healthy=original
 
-@pytest.mark.anyio
-async def test_configured_broker_failure_is_not_reported_as_published():
+def test_configured_broker_failure_is_not_reported_as_published():
+ import asyncio
  from app.event_broker import broker
  original=(broker.redis_url,broker._redis,broker._healthy)
  try:
   broker.redis_url="redis://unit-test"; broker._redis=None; broker._healthy=False
-  assert await broker.publish({"event_id":"pending"}) is False
+  assert asyncio.run(broker.publish({"event_id":"pending"})) is False
  finally:
   broker.redis_url,broker._redis,broker._healthy=original
