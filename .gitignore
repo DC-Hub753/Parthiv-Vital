@@ -1,5 +1,10 @@
 # Dependencies
 node_modules/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
 
 # Production/build output
 /dist/
@@ -28,3 +33,12 @@ pnpm-debug.log*
 coverage/
 playwright-report/
 test-results/
+
+# Local datasets and generated ML artifacts (never commit patient data)
+ml/data/raw/
+ml/data/processed/
+ml/artifacts/*
+!ml/artifacts/README.md
+*.joblib
+*.pkl
+*.pickle
