@@ -9,17 +9,22 @@ const routes = [
 ];
 
 async function signIn(page) {
-  // Keep E2E deterministic and independent of production credentials/secrets.
-  await page.route('**/api/v1/auth/login', async route => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ access_token: 'e2e-test-token', token_type: 'bearer', expires_in: 900, username: 'e2e-operator', role: 'admin', full_name: 'E2E Operator' }),
+  // Local browser tests use explicit demo mode; deployed smoke tests stub only
+  // the login request so they never need production credentials or secrets.
+  const isLiveSmoke = Boolean(process.env.E2E_BASE_URL);
+  if (isLiveSmoke) {
+    await page.route('**/api/v1/auth/login', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ access_token: 'e2e-test-token', token_type: 'bearer', expires_in: 900, username: 'e2e-operator', role: 'admin', full_name: 'E2E Operator' }),
+      });
     });
-  });
+  }
+
   await page.goto('/#/login');
-  await page.getByLabel('Username').fill('e2e-operator');
-  await page.getByLabel('Password').fill('e2e-test-password');
+  await page.getByLabel('Username').fill(isLiveSmoke ? 'e2e-operator' : 'nurse');
+  await page.getByLabel('Password').fill(isLiveSmoke ? 'e2e-test-password' : 'NursePass123!');
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page).toHaveURL(/#\/dashboard$/);
 }
