@@ -53,5 +53,5 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Verify deployed frontend routes and refreshes
         env:
-          E2E_BASE_URL: https://vitalguard-ai-dc.onrender.com
+          E2E_BASE_URL: https://parthiv-vital-frontend.onrender.com
         run: npx playwright test
