@@ -57,7 +57,7 @@ def migrate(connection: Connection) -> int:
         if index.name not in indexes:
             index.create(connection, checkfirst=False)
 
-    _MIGRATION_METADATA.create_all(connection, tables=["vitalguard_storage_migrations"])
+    _MIGRATIONS.create(connection, checkfirst=True)
     current = connection.execute(
         select(_MIGRATIONS.c.version).order_by(_MIGRATIONS.c.version.desc()).limit(1)
     ).scalar_one_or_none()
