@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
-from sqlalchemy import Column, DateTime, Index, Integer, MetaData, String, Table, Text, create_engine, func, insert, inspect, select, update
+from sqlalchemy import Column, DateTime, Index, Integer, MetaData, String, Table, Text, create_engine, func, insert, inspect, select, update, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.pool import StaticPool
@@ -98,7 +98,7 @@ def save_observation(patient_id:str,inputs:dict[str,Any],prediction:dict[str,Any
   with engine.begin() as connection:
    observation_id=connection.execute(insert(_OBSERVATIONS).values(patient_id=patient_id,input_json=json.dumps(inputs,separators=(",",":"),allow_nan=False),prediction_json=json.dumps(prediction,separators=(",",":"),allow_nan=False),model_version=prediction["model_version"]).returning(_OBSERVATIONS.c.id)).scalar_one()
    row=connection.execute(select(_OBSERVATIONS).where(_OBSERVATIONS.c.id==observation_id)).mappings().one()
-   event_id=str(uuid.uuid4()); event_payload={"observation_id":observation_id,"patient_id":patient_id,"inputs":inputs,"prediction":prediction}
+   # Serialize only event allocation/commit on PostgreSQL so an event_seq cursor cannot skip a transaction that commits late.\n   if engine.dialect.name=="postgresql": connection.execute(text("SELECT pg_advisory_xact_lock(734219812)"))\n   event_id=str(uuid.uuid4()); event_payload={"observation_id":observation_id,"patient_id":patient_id,"inputs":inputs,"prediction":prediction}
    event_seq=connection.execute(insert(_EVENTS).values(event_id=event_id,event_type="observation.created",schema_version=1,session_id=session_id,observation_id=observation_id,payload_json=json.dumps(event_payload,separators=(",",":"),allow_nan=False),publish_attempts=0).returning(_EVENTS.c.id)).scalar_one()
   saved=_serialize(row); saved["event"]={"event_id":event_id,"event_type":"observation.created","schema_version":1,"event_seq":event_seq,"session_id":session_id,"created_at":saved["created_at"],"payload":event_payload}
   return saved
