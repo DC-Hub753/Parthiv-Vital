@@ -1,15 +1,8 @@
-# Reproducible pipeline configuration. No clinical dataset is bundled or downloaded.
+# Versioned benchmark protocol. Synthetic smoke metrics are not clinical evidence.
 project: vitalguard-ml
 seed: 20261010
 feature_version: vital-signs-v1
-features:
-  - age
-  - heart_rate
-  - spo2
-  - systolic_bp
-  - diastolic_bp
-  - temperature
-  - respiratory_rate
+features: [age, heart_rate, spo2, systolic_bp, diastolic_bp, temperature, respiratory_rate]
 target:
   name: demo_heuristic_risk_label
   positive_class: 1
@@ -20,10 +13,17 @@ split:
   train: 0.70
   validation: 0.15
   test: 0.15
-  strategy: stratified-row-split-for-synthetic-smoke-test
+  strategy: patient-group-disjoint
 model:
-  algorithm: logistic_regression
-  max_iter: 1200
-  class_weight: balanced
+  candidates: [logistic_regression, random_forest, xgboost]
+  selection_metric: roc_auc
   threshold: 0.5
+  threshold_policy: fixed_predeclared_until_clinical_requirements_exist
+  max_iter: 1200
+  rf_estimators: 200
+  rf_min_samples_leaf: 2
+  include_xgboost: true
+  xgb_estimators: 150
+  xgb_max_depth: 3
+  xgb_learning_rate: 0.05
 artifact_dir: ml/artifacts
