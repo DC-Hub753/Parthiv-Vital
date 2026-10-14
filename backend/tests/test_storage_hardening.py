@@ -90,3 +90,20 @@ def test_health_inspection_does_not_create_missing_schema(tmp_path, monkeypatch)
     with sqlite3.connect(path) as connection:
         tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert tables == set()
+
+def test_incompatible_event_log_fails_closed_without_advancing_migration(tmp_path,monkeypatch):
+    path=tmp_path/"legacy-events.sqlite3"
+    with sqlite3.connect(path) as connection:
+        connection.execute("CREATE TABLE observations (id INTEGER PRIMARY KEY, patient_id TEXT NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, input_json TEXT NOT NULL, prediction_json TEXT NOT NULL, model_version TEXT NOT NULL)")
+        connection.execute("CREATE TABLE vitalguard_storage_migrations (version INTEGER PRIMARY KEY, applied_at DATETIME NOT NULL, description VARCHAR(200) NOT NULL)")
+        connection.execute("INSERT INTO vitalguard_storage_migrations(version, applied_at, description) VALUES (1, CURRENT_TIMESTAMP, 'phase one')")
+        connection.execute("CREATE TABLE vitalguard_event_log (id INTEGER PRIMARY KEY, event_id TEXT)")
+    monkeypatch.delenv("DATABASE_URL",raising=False)
+    monkeypatch.setenv("VITALGUARD_DB_PATH",str(path))
+    with pytest.raises(StorageError,match="schema initialization failed"):
+        initialize_storage()
+    with sqlite3.connect(path) as connection:
+        columns={row[1] for row in connection.execute("PRAGMA table_info(vitalguard_event_log)")}
+        version=connection.execute("SELECT MAX(version) FROM vitalguard_storage_migrations").fetchone()[0]
+    assert columns=={"id","event_id"}
+    assert version==1
