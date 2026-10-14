@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../store/AuthContext.tsx';
-import { ShieldCheck, UserCheck, Stethoscope, HeartPulse } from 'lucide-react';
+import { APP_CONFIG } from '../services/config.ts';
+import { ShieldCheck, Stethoscope, HeartPulse } from 'lucide-react';
 
 export function LoginPage() {
   const { login } = useAuth();
@@ -55,7 +56,7 @@ export function LoginPage() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
-              placeholder="e.g. clinician, nurse, admin"
+              placeholder="Enter your assigned username"
             />
           </div>
 
@@ -89,37 +90,27 @@ export function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-6 border-t border-slate-800 pt-5">
-          <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400 mb-2">
-            Demo Role Quick-Fill:
-          </p>
-          <div className="grid grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={() => fillDemo('admin', 'AdminPass123!')}
-              className="flex flex-col items-center justify-center p-2 rounded-lg border border-slate-800 bg-slate-950/60 hover:bg-slate-800 hover:border-slate-700 text-xs text-slate-300 transition"
-            >
-              <ShieldCheck size={16} className="text-amber-400 mb-1" />
-              <span className="font-semibold text-[11px]">Admin</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => fillDemo('clinician', 'ClinicianPass123!')}
-              className="flex flex-col items-center justify-center p-2 rounded-lg border border-slate-800 bg-slate-950/60 hover:bg-slate-800 hover:border-slate-700 text-xs text-slate-300 transition"
-            >
-              <Stethoscope size={16} className="text-teal-400 mb-1" />
-              <span className="font-semibold text-[11px]">Clinician</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => fillDemo('nurse', 'NursePass123!')}
-              className="flex flex-col items-center justify-center p-2 rounded-lg border border-slate-800 bg-slate-950/60 hover:bg-slate-800 hover:border-slate-700 text-xs text-slate-300 transition"
-            >
-              <HeartPulse size={16} className="text-cyan-400 mb-1" />
-              <span className="font-semibold text-[11px]">Nurse</span>
-            </button>
+        {APP_CONFIG.demoMode && (
+          <div className="mt-6 border-t border-slate-800 pt-5">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400 mb-2">
+              Demo Role Quick-Fill:
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              <button type="button" onClick={() => fillDemo('admin', 'AdminPass123!')} className="flex flex-col items-center justify-center p-2 rounded-lg border border-slate-800 bg-slate-950/60 hover:bg-slate-800 hover:border-slate-700 text-xs text-slate-300 transition">
+                <ShieldCheck size={16} className="text-amber-400 mb-1" />
+                <span className="font-semibold text-[11px]">Admin</span>
+              </button>
+              <button type="button" onClick={() => fillDemo('clinician', 'ClinicianPass123!')} className="flex flex-col items-center justify-center p-2 rounded-lg border border-slate-800 bg-slate-950/60 hover:bg-slate-800 hover:border-slate-700 text-xs text-slate-300 transition">
+                <Stethoscope size={16} className="text-teal-400 mb-1" />
+                <span className="font-semibold text-[11px]">Clinician</span>
+              </button>
+              <button type="button" onClick={() => fillDemo('nurse', 'NursePass123!')} className="flex flex-col items-center justify-center p-2 rounded-lg border border-slate-800 bg-slate-950/60 hover:bg-slate-800 hover:border-slate-700 text-xs text-slate-300 transition">
+                <HeartPulse size={16} className="text-cyan-400 mb-1" />
+                <span className="font-semibold text-[11px]">Nurse</span>
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         <p className="mt-5 text-[11px] leading-4 text-slate-500 text-center">
           Demo only. This system is not clinically validated and must not be used for real patient care.
