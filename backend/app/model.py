@@ -68,6 +68,7 @@ def active_model_metadata():
         return {"model_version":SYNTHETIC_MODEL_VERSION,"algorithm":"StandardScaler + LogisticRegression","mode":"synthetic_demo","artifact_configured":False,"artifact_available":False,"training_data_version":"generated-heuristic-labels","clinical_training_verified":False,"clinically_validated":False}
     artifact=Path(path).expanduser(); manifest=_manifest_for(path); selected=manifest.get("selected_candidate")
     candidates=manifest.get("candidates",{}); candidate=next((name for name,meta in candidates.items() if meta.get("artifact")==artifact.name),None)
+    if candidate is None and artifact.name==manifest.get("selected_artifact"): candidate=selected
     algorithm=candidate or os.getenv("VITALGUARD_MODEL_ALGORITHM",artifact.stem.replace("vitalguard_", ""))
     dataset_version=manifest.get("dataset_version")
     version=os.getenv("VITALGUARD_MODEL_VERSION") or manifest.get("model_version") or f"{algorithm}:{dataset_version or 'unversioned-artifact'}"
