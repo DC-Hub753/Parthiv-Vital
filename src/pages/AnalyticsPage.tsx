@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Shell } from '../components/layout/Shell.tsx';
 import { PageHeader, SectionCard } from '../components/ui/Primitives.tsx';
 import { DemoPill } from '../components/ui/Badges.tsx';
@@ -6,8 +7,16 @@ import { MiniBars } from '../components/charts/Vitals.tsx';
 import { RiskTrajectoryChart } from '../components/charts/Trajectory.tsx';
 import { Sparkline } from '../components/ui/premium.tsx';
 import { useSimulation } from '../store/useSimulation.ts';
+
 export function AnalyticsPage() {
-  const { patients, risks, alerts } = useSimulation();
+  const { patients, risks, alerts, refresh } = useSimulation();
+
+  useEffect(() => {
+    if (patients.length === 0 || Object.keys(risks).length === 0) {
+      void refresh();
+    }
+  }, [patients.length, risks, refresh]);
+
   const vals = Object.values(risks);
   const dist = [
     { name: 'Critical', value: vals.filter((r) => r.level === 'critical').length },
@@ -15,10 +24,10 @@ export function AnalyticsPage() {
     { name: 'Moderate', value: vals.filter((r) => r.level === 'moderate').length },
     { name: 'Low', value: vals.filter((r) => r.level === 'low').length },
   ];
-  const avg = Math.round(vals.reduce((s, r) => s + r.score, 0) / Math.max(1, vals.length));
-  const wors = patients.filter((p) => risks[p.id].trend === 'worsening').length;
-  const stab = patients.filter((p) => risks[p.id].trend === 'stable').length;
-  const rec = patients.filter((p) => risks[p.id].trend === 'recovering').length;
+  const avg = Math.round(vals.reduce((s, r) => s + (r.score || 0), 0) / Math.max(1, vals.length));
+  const wors = patients.filter((p) => risks[p.id]?.trend === 'worsening').length;
+  const stab = patients.filter((p) => risks[p.id]?.trend === 'stable').length;
+  const rec = patients.filter((p) => risks[p.id]?.trend === 'recovering').length;
   const scen = [
     { name: 'Stable', value: patients.filter((p) => p.scenario === 'stable').length },
     { name: 'Worsening', value: patients.filter((p) => p.scenario === 'worsening').length },
@@ -29,11 +38,14 @@ export function AnalyticsPage() {
     { name: 'Ack', value: alerts.filter((a) => a.status === 'acknowledged').length },
     { name: 'Resolved', value: alerts.filter((a) => a.status === 'resolved').length },
   ];
-  const hero = risks['P-SIM-003'];
-  const hero2 = risks['P-SIM-006'];
-  const rec1 = risks['P-SIM-004'];
+  const patientKeys = Object.keys(risks);
+  const hero = risks['P-SIM-003'] || (patientKeys.length > 0 ? risks[patientKeys[0]] : null);
+  const hero2 = risks['P-SIM-006'] || (patientKeys.length > 1 ? risks[patientKeys[1]] : null);
+  const rec1 = risks['P-SIM-004'] || (patientKeys.length > 2 ? risks[patientKeys[2]] : null);
   const open = alerts.filter((a) => a.status === 'open').length;
-  const trendRows = Object.values(risks).slice(0, 8).flatMap((r) => r.trajectory).slice(-18);
+  const rawTrend = Object.values(risks).slice(0, 8).flatMap((r) => r.trajectory || []).slice(-18);
+  const trendRows = rawTrend.length > 0 ? rawTrend : [15, 20, 25, 30, 28, 35, 40];
+
   return (
     <Shell title="Analytics" subtitle="Cohort intelligence workspace">
       <PageHeader eyebrow="Cohort intelligence" title="Analytics"
@@ -74,11 +86,11 @@ export function AnalyticsPage() {
       </div>
       <div className="mt-4">
         <SectionCard eyebrow="Comparison" title="Trajectory comparison" hint="Worsening vs recovering signals" label="Trajectory comparison">
-          {hero && <RiskTrajectoryChart data={hero.trajectory} labels={hero.trajectoryLabels} height={190} id="vg-analytics-hero" />}
+          {hero && hero.trajectory && <RiskTrajectoryChart data={hero.trajectory} labels={hero.trajectoryLabels || []} height={190} id="vg-analytics-hero" />}
           <ul className="mt-3 space-y-1.5 text-xs">
-            <li className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-teal-600" aria-hidden /><strong>P-SIM-003</strong><span className="text-slate-400">worsening · {hero?.trajectory.join(' → ')}</span></li>
-            <li className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-orange-500" aria-hidden /><strong>P-SIM-006</strong><span className="text-slate-400">worsening · {hero2?.trajectory.join(' → ')}</span></li>
-            <li className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-cyan-500" aria-hidden /><strong>P-SIM-004</strong><span className="text-slate-400">recovering · {rec1?.trajectory.join(' → ')}</span></li>
+            {hero && <li className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-teal-600" aria-hidden /><strong>{hero.patientId}</strong><span className="text-slate-400">{hero.trend} · {hero.trajectory?.join(' → ')}</span></li>}
+            {hero2 && <li className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-orange-500" aria-hidden /><strong>{hero2.patientId}</strong><span className="text-slate-400">{hero2.trend} · {hero2.trajectory?.join(' → ')}</span></li>}
+            {rec1 && <li className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-cyan-500" aria-hidden /><strong>{rec1.patientId}</strong><span className="text-slate-400">{rec1.trend} · {rec1.trajectory?.join(' → ')}</span></li>}
           </ul>
         </SectionCard>
       </div>

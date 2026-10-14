@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Clock3, RefreshCw, History } from 'lucide-react';
 import { APP_CONFIG } from '../../services/config.ts';
+import { authorizedFetch, getOperatorAccessToken } from '../../services/authenticatedFetch.ts';
 
 type RecordItem = {
   id: number;
@@ -20,10 +21,15 @@ export function BackendObservationHistory() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    if (!getOperatorAccessToken()) {
+      setError('Your operator session is missing or expired. Sign in again to load backend data.');
+      setLoading(false);
+      return;
+    }
     try {
       const params = new URLSearchParams({ limit: '25' });
       if (patientId.trim()) params.set('patient_id', patientId.trim());
-      const response = await fetch(`${APP_CONFIG.apiBaseUrl}/api/v1/observations?${params.toString()}`, {
+      const response = await authorizedFetch(`${APP_CONFIG.apiBaseUrl}/api/v1/observations?${params.toString()}`, {
         signal: AbortSignal.timeout(8000),
       });
       if (!response.ok) throw new Error('History API unavailable');

@@ -1,0 +1,73 @@
+from fastapi.testclient import TestClient
+import pytest
+from app.main import app
+from auth_helpers import authenticate_test_client
+
+@pytest.fixture
+def client(tmp_path, monkeypatch):
+    monkeypatch.setenv("VITALGUARD_DB_PATH", str(tmp_path / "live.sqlite3"))
+    with TestClient(app) as test_client:
+        authenticate_test_client(test_client)
+        yield test_client
+
+def test_websocket_receives_observation_only_after_ingestion(client):
+    token = client.headers["Authorization"].split(" ", 1)[1]
+    with client.websocket_connect("/api/v1/live", subprotocols=["vitalguard-live", f"vg-token.{token}"]) as websocket:
+        connected = websocket.receive_json()
+        assert connected["type"] == "connected"
+        response = client.post("/api/v1/demo/observations",
+            json={"patient_id": "DEMO-WS-001", "scenario": "worsening", "step": 2})
+        assert response.status_code == 200
+        event = websocket.receive_json()
+        assert event["type"] == "observation.created"
+        assert event["event_id"] == response.json()["observation_id"]
+        assert event["patient_id"] == "DEMO-WS-001"
+        assert event["demo_only"] is True
+
+def test_websocket_heartbeat(client):
+    token = client.headers["Authorization"].split(" ", 1)[1]
+    with client.websocket_connect("/api/v1/live", subprotocols=["vitalguard-live", f"vg-token.{token}"]) as websocket:
+        assert websocket.receive_json()["type"] == "connected"
+        websocket.send_text("ping")
+        assert websocket.receive_json()["type"] == "pong"
+
+def test_websocket_rejects_query_string_token(client):
+    token = client.headers["Authorization"].split(" ", 1)[1]
+    with pytest.raises(Exception):
+        with client.websocket_connect(f"/api/v1/live?token={token}") as websocket:
+            websocket.receive_json()
+
+@pytest.mark.parametrize("patient_id", [None, "", "   ", [], {}, 123, True, "P" * 65])
+def test_websocket_invalid_subscription_patient_id_returns_error_and_keeps_connection(client, patient_id):
+    token = client.headers["Authorization"].split(" ", 1)[1]
+    with client.websocket_connect("/api/v1/live", subprotocols=["vitalguard-live", f"vg-token.{token}"]) as websocket:
+        assert websocket.receive_json()["type"] == "connected"
+        websocket.send_json({"action": "subscribe", "patient_id": patient_id})
+        response = websocket.receive_json()
+        assert response["type"] == "error"
+        assert "patient_id" in response["message"]
+        websocket.send_text("ping")
+        assert websocket.receive_json()["type"] == "pong"
+
+@pytest.mark.parametrize("patient_id", [None, "", "   ", [], {}, 123, True, "P" * 65])
+def test_websocket_invalid_unsubscription_patient_id_returns_error_and_keeps_connection(client, patient_id):
+    token = client.headers["Authorization"].split(" ", 1)[1]
+    with client.websocket_connect("/api/v1/live", subprotocols=["vitalguard-live", f"vg-token.{token}"]) as websocket:
+        assert websocket.receive_json()["type"] == "connected"
+        websocket.send_json({"action": "unsubscribe", "patient_id": patient_id})
+        response = websocket.receive_json()
+        assert response["type"] == "error"
+        assert "patient_id" in response["message"]
+        websocket.send_text("ping")
+        assert websocket.receive_json()["type"] == "pong"
+
+def test_websocket_rejects_non_object_json_payload_and_keeps_connection(client):
+    token = client.headers["Authorization"].split(" ", 1)[1]
+    with client.websocket_connect("/api/v1/live", subprotocols=["vitalguard-live", f"vg-token.{token}"]) as websocket:
+        assert websocket.receive_json()["type"] == "connected"
+        websocket.send_json(["subscribe", "DEMO-WS-001"])
+        response = websocket.receive_json()
+        assert response["type"] == "error"
+        assert "object" in response["message"]
+        websocket.send_text("ping")
+        assert websocket.receive_json()["type"] == "pong"
