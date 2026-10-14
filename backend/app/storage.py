@@ -99,8 +99,8 @@ def save_observation(patient_id:str,inputs:dict[str,Any],prediction:dict[str,Any
    observation_id=connection.execute(insert(_OBSERVATIONS).values(patient_id=patient_id,input_json=json.dumps(inputs,separators=(",",":"),allow_nan=False),prediction_json=json.dumps(prediction,separators=(",",":"),allow_nan=False),model_version=prediction["model_version"]).returning(_OBSERVATIONS.c.id)).scalar_one()
    row=connection.execute(select(_OBSERVATIONS).where(_OBSERVATIONS.c.id==observation_id)).mappings().one()
    event_id=str(uuid.uuid4()); event_payload={"observation_id":observation_id,"patient_id":patient_id,"inputs":inputs,"prediction":prediction}
-   connection.execute(insert(_EVENTS).values(event_id=event_id,event_type="observation.created",schema_version=1,session_id=session_id,observation_id=observation_id,payload_json=json.dumps(event_payload,separators=(",",":"),allow_nan=False),publish_attempts=0))
-  saved=_serialize(row); saved["event"]={"event_id":event_id,"event_type":"observation.created","schema_version":1,"event_seq":observation_id,"session_id":session_id,"created_at":saved["created_at"],"payload":event_payload}
+   event_seq=connection.execute(insert(_EVENTS).values(event_id=event_id,event_type="observation.created",schema_version=1,session_id=session_id,observation_id=observation_id,payload_json=json.dumps(event_payload,separators=(",",":"),allow_nan=False),publish_attempts=0).returning(_EVENTS.c.id)).scalar_one()
+  saved=_serialize(row); saved["event"]={"event_id":event_id,"event_type":"observation.created","schema_version":1,"event_seq":event_seq,"session_id":session_id,"created_at":saved["created_at"],"payload":event_payload}
   return saved
  except (SQLAlchemyError,ValueError,KeyError,TypeError) as exc:raise StorageError("Observation and event could not be persisted.") from exc
 
