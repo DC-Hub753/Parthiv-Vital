@@ -23,9 +23,17 @@ def metric_or_none(fn,y,p):
     try:return float(fn(y,p))
     except ValueError:return None
 
+def calibration_ece(y, probs, bins=10):
+    y=np.asarray(y); probs=np.asarray(probs); edges=np.linspace(0.0,1.0,bins+1); total=max(1,len(probs)); error=0.0
+    for i in range(bins):
+        mask=(probs>=edges[i]) & ((probs<edges[i+1]) if i<bins-1 else (probs<=edges[i+1]))
+        if mask.any(): error+=float(mask.sum())/total*abs(float(np.mean(y[mask]))-float(np.mean(probs[mask])))
+    return error
+
 def calculate_metrics(y, probs, threshold):
+    y=np.asarray(y); probs=np.asarray(probs)
     pred=(probs>=threshold).astype(int); tn,fp,fn,tp=confusion_matrix(y,pred,labels=[0,1]).ravel()
-    return {"roc_auc":metric_or_none(roc_auc_score,y,probs),"pr_auc":metric_or_none(average_precision_score,y,probs),"sensitivity":float(tp/(tp+fn)) if tp+fn else None,"specificity":float(tn/(tn+fp)) if tn+fp else None,"precision":float(precision_score(y,pred,zero_division=0)),"brier_score":float(brier_score_loss(y,probs)),"threshold":float(threshold)}
+    return {"roc_auc":metric_or_none(roc_auc_score,y,probs),"pr_auc":metric_or_none(average_precision_score,y,probs),"sensitivity":float(tp/(tp+fn)) if tp+fn else None,"specificity":float(tn/(tn+fp)) if tn+fp else None,"precision":float(precision_score(y,pred,zero_division=0)),"brier_score":float(brier_score_loss(y,probs)),"calibration_ece_10_bins":calibration_ece(y,probs),"threshold":float(threshold)}
 
 def main():
     p=argparse.ArgumentParser(); p.add_argument("--input",required=True); p.add_argument("--config",default="ml/config.yaml"); p.add_argument("--output-dir",default="ml/artifacts"); p.add_argument("--dataset-version",default="unverified-local-csv"); p.add_argument("--smoke-test",action="store_true")
