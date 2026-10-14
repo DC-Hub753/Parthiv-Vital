@@ -8,7 +8,7 @@ Each observation request commits the observation and an `observation.created` ev
 - `WS /api/v1/live/events?after_seq=123` streams notifications and replays events after the supplied cursor.
 - Clients must deduplicate by `event_id` and use `event_seq` as the durable cursor. Reconnect with the last processed sequence; query HTTP history if any sequence gap is detected.
 - Redis Pub/Sub is at-least-once best-effort fan-out, not a durable queue. The database outbox retries events when Redis is unavailable; duplicates can occur when publish succeeds but its database acknowledgement fails. This is intentional and is why client deduplication is mandatory.
-- Event sequence reflects database insertion order, not a promise that concurrent live notifications arrive in that order. Consumers should sort/reconcile by `event_seq`.
+- PostgreSQL event allocation takes a short transaction-scoped advisory lock immediately before inserting the outbox row. This serializes event-sequence allocation through commit, preventing a lower sequence from committing after a higher sequence. SQLite serializes its writers. Redis notifications can still arrive out of order across publishers; clients reconcile gaps from durable history and deduplicate by `event_id`/sequence.
 
 ## Deployment configuration
 
