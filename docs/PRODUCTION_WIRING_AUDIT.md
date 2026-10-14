@@ -31,7 +31,7 @@ The repository's Render services include a second backend service named `parthiv
 
 ## Remaining release blockers / limitations
 
-- The free Render PostgreSQL allowance is already occupied by a different project. This change does not connect Parthiv-Vital to that database and does not create a paid database. The backend may therefore still use ephemeral SQLite until a dedicated database is provisioned and configured.
+- No dedicated PostgreSQL instance was provisioned for Parthiv-Vital in this pass. The existing database belongs to a separate project, so this change does not reuse it or create a paid database. The backend may therefore still use ephemeral SQLite until a dedicated database is provisioned and configured.
 - Render logs showed repeated `WebSocket /api/v1/live` 403 responses. The live socket requires a valid signed-in session and the `vitalguard-live` subprotocol. Verify the browser login/session against this repository's backend after configuring the correct API URL; do not bypass WebSocket authentication.
 - No authorized hospital/device feed is configured. Current ingestion paths are explicitly synthetic-demo or historical replay; a live feed remains an integration task.
 - This branch must pass repository CI and the deployed health/API smoke checks before being described as verified end-to-end.
