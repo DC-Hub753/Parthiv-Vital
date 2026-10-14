@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+
+vi.mock('../services/config.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../services/config.ts')>();
+  return { ...actual, APP_CONFIG: { ...actual.APP_CONFIG, demoMode: false } };
+});
+
 import { LoginPage } from './LoginPage';
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import { AuthProvider } from '../store/AuthContext';
@@ -41,14 +47,12 @@ afterEach(() => {
 });
 
 describe('authenticated login', () => {
-  it('fills the selected role credentials and opens the dashboard after API login', async () => {
+  it('submits credentials to the API and opens the dashboard', async () => {
     renderWithAuth('/login');
 
-    fireEvent.click(screen.getByRole('button', { name: /Nurse/i }));
-
-    expect(screen.getByLabelText(/Username/i)).toHaveValue('nurse');
-    expect(screen.getByLabelText(/Password/i)).toHaveValue('NursePass123!');
-
+    expect(screen.queryByText(/Demo Role Quick-Fill/i)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/Username/i), { target: { value: 'nurse' } });
+    fireEvent.change(screen.getByLabelText(/Password/i), { target: { value: 'NursePass123!' } });
     fireEvent.click(screen.getByRole('button', { name: /Sign in/i }));
 
     expect(await screen.findByText('Dashboard mock')).toBeInTheDocument();
