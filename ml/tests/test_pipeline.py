@@ -32,3 +32,29 @@ def test_serialization_round_trip_predictions(tmp_path):
  d=validate_frame(sample()); model=Pipeline([("scale",StandardScaler()),("clf",LogisticRegression(random_state=1))]).fit(d[FEATURES],d.target)
  before=model.predict_proba(d[FEATURES])[:,1]; path=tmp_path/"model.joblib"; joblib.dump(model,path); after=joblib.load(path).predict_proba(d[FEATURES])[:,1]
  np.testing.assert_allclose(before,after,rtol=0,atol=1e-12)
+
+def test_benchmark_is_reproducible_and_saves_recalculable_test_predictions(tmp_path,monkeypatch):
+ import json
+ import train
+ from evaluate import calculate
+ frame=sample(120)
+ source=tmp_path/"approved-test-fixture.csv"; frame.to_csv(source,index=False)
+ config=Path(__file__).resolve().parents[1]/"config.yaml"
+ manifests=[]
+ for run in ("run_a","run_b"):
+  output=tmp_path/run
+  monkeypatch.setattr(sys,"argv",["train.py","--input",str(source),"--config",str(config),"--output-dir",str(output),"--dataset-version","unit-test-fixture","--smoke-test"])
+  train.main()
+  manifest=json.loads((output/"manifest.json").read_text()); manifests.append(manifest)
+  assert (output/"vitalguard_selected.joblib").is_file()
+  for name,meta in manifest["candidates"].items():
+   saved=pd.read_csv(output/meta["test_predictions_file"])
+   recalculated=calculate(saved["target"].to_numpy(),saved["probability"].to_numpy(),meta["test_metrics"]["threshold"])
+   for metric,value in recalculated.items():
+    assert value == pytest.approx(meta["test_metrics"][metric],abs=1e-12) if value is not None else meta["test_metrics"][metric] is None
+ assert manifests[0]["selected_candidate"]==manifests[1]["selected_candidate"]
+ for name in manifests[0]["candidates"]:
+  assert manifests[0]["candidates"][name]["validation_metrics"]==manifests[1]["candidates"][name]["validation_metrics"]
+  a=pd.read_csv(tmp_path/"run_a"/manifests[0]["candidates"][name]["test_predictions_file"])
+  b=pd.read_csv(tmp_path/"run_b"/manifests[1]["candidates"][name]["test_predictions_file"])
+  np.testing.assert_allclose(a["probability"],b["probability"],rtol=0,atol=1e-12)
